@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::path::Display;
 use std::process::Command;
 use sysinfo::{Components, Disks, Networks, System};
-
+mod file_service;
 #[macro_use]
 extern crate prettytable;
 struct JoltOutput {
@@ -52,6 +52,27 @@ impl fmt::Display for JoltOutput {
     }
 }
 
+fn get_system_memory() {
+    let mut sys = System::new_all();
+    sys.refresh_all();
+    println!("total memory: {} Mb", sys.total_memory() / 1024 / 1024);
+    println!("used memory : {} Mb", sys.used_memory() / 1024 / 1024);
+    println!("total swap  : {} Mb", sys.total_swap() / 1024 / 1024);
+    println!("used swap   : {} Mb", sys.used_swap() / 1024 / 1024);
+}
+
+fn get_system_information() {
+    let mut sys = System::new_all();
+    sys.refresh_all();
+    println!("System name:             {:?}", System::name());
+    println!("System kernel version:   {:?}", System::kernel_version());
+    println!("System OS version:       {:?}", System::os_version());
+    println!("System host name:        {:?}", System::host_name());
+     // Number of CPUs:
+     println!("NB CPUs: {}", sys.cpus().len());
+     println!("total memory: {} Mb", sys.total_memory() / 1024 / 1024);
+}
+
 fn get_system_preformance() {
     // Please note that we use "new_all" to ensure that all list of
     // components, network interfaces, disks and users are already
@@ -61,26 +82,10 @@ fn get_system_preformance() {
     // First we update all information of our `System` struct.
     sys.refresh_all();
 
-    println!("=> system:");
-    // RAM and swap information:
-    println!("total memory: {} bytes", sys.total_memory());
-    println!("used memory : {} bytes", sys.used_memory());
-    println!("total swap  : {} bytes", sys.total_swap());
-    println!("used swap   : {} bytes", sys.used_swap());
-
-    // Display system information:
-    println!("System name:             {:?}", System::name());
-    println!("System kernel version:   {:?}", System::kernel_version());
-    println!("System OS version:       {:?}", System::os_version());
-    println!("System host name:        {:?}", System::host_name());
-
-    // Number of CPUs:
-    println!("NB CPUs: {}", sys.cpus().len());
-
-    // Display processes ID, name na disk usage:
-    for (pid, process) in sys.processes() {
-        println!("[{pid}] {} {:?}", process.name(), process.disk_usage());
-    }
+    // // Display processes ID, name na disk usage:
+    // for (pid, process) in sys.processes() {
+    //     println!("[{pid}] {} {:?}", process.name(), process.disk_usage());
+    // }
 
     // We display all disks' information:
     println!("=> disks:");
@@ -89,23 +94,23 @@ fn get_system_preformance() {
         println!("{disk:?}");
     }
 
-    // Network interfaces name, data received and data transmitted:
-    let networks = Networks::new_with_refreshed_list();
-    println!("=> networks:");
-    for (interface_name, data) in &networks {
-        println!(
-            "{interface_name}: {}/{} B",
-            data.received(),
-            data.transmitted()
-        );
-    }
+    // // Network interfaces name, data received and data transmitted:
+    // let networks = Networks::new_with_refreshed_list();
+    // println!("=> networks:");
+    // for (interface_name, data) in &networks {
+    //     println!(
+    //         "{interface_name}: {}/{} B",
+    //         data.received(),
+    //         data.transmitted()
+    //     );
+    // }
 
-    // Components temperature:
-    let components = Components::new_with_refreshed_list();
-    println!("=> components:");
-    for component in &components {
-        println!("{component:?}");
-    }
+    // // Components temperature:
+    // let components = Components::new_with_refreshed_list();
+    // println!("=> components:");
+    // for component in &components {
+    //     println!("{component:?}");
+    // }
     sys.refresh_cpu(); // Refreshing CPU information.
     for cpu in sys.cpus() {
         print!("{}% ", cpu.cpu_usage());
@@ -226,19 +231,8 @@ fn scan_running_proccess() {
     table.printstd();
 }
 
-fn list_file() {
-    let output = Command::new("ls")
-        .arg("-l")
-        .arg("-a")
-        .arg("-s")
-        .output()
-        .expect("failed to execute process");
-    let output = String::from_utf8_lossy(&output.stdout);
-    println!("{}", output);
-}
-
 fn main() {
-    // list_file();
+    file_service::get_files_in_directory("./test_files");
     get_system_preformance();
     scan_running_proccess();
 }
