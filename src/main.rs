@@ -8,6 +8,16 @@ use sysinfo::{Components, Disks, Networks, System};
 mod file_service;
 #[macro_use]
 extern crate prettytable;
+use clap::Parser;
+
+// /// Simple program to greet a person
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(short,long,default_value_t = String::from("./test_files"))]
+    path: String,
+}
+
 struct JoltOutput {
     user: String,
     pid: String,
@@ -68,52 +78,22 @@ fn get_system_information() {
     println!("System kernel version:   {:?}", System::kernel_version());
     println!("System OS version:       {:?}", System::os_version());
     println!("System host name:        {:?}", System::host_name());
-     // Number of CPUs:
-     println!("NB CPUs: {}", sys.cpus().len());
-     println!("total memory: {} Mb", sys.total_memory() / 1024 / 1024);
+    // Number of CPUs:
+    println!("NB CPUs: {}", sys.cpus().len());
+    println!("total memory: {} Mb", sys.total_memory() / 1024 / 1024);
 }
 
-fn get_system_preformance() {
-    // Please note that we use "new_all" to ensure that all list of
-    // components, network interfaces, disks and users are already
-    // filled!
+fn get_network_information() {
     let mut sys = System::new_all();
-
-    // First we update all information of our `System` struct.
     sys.refresh_all();
-
-    // // Display processes ID, name na disk usage:
-    // for (pid, process) in sys.processes() {
-    //     println!("[{pid}] {} {:?}", process.name(), process.disk_usage());
-    // }
-
-    // We display all disks' information:
-    println!("=> disks:");
-    let disks = Disks::new_with_refreshed_list();
-    for disk in &disks {
-        println!("{disk:?}");
-    }
-
-    // // Network interfaces name, data received and data transmitted:
-    // let networks = Networks::new_with_refreshed_list();
-    // println!("=> networks:");
-    // for (interface_name, data) in &networks {
-    //     println!(
-    //         "{interface_name}: {}/{} B",
-    //         data.received(),
-    //         data.transmitted()
-    //     );
-    // }
-
-    // // Components temperature:
-    // let components = Components::new_with_refreshed_list();
-    // println!("=> components:");
-    // for component in &components {
-    //     println!("{component:?}");
-    // }
-    sys.refresh_cpu(); // Refreshing CPU information.
-    for cpu in sys.cpus() {
-        print!("{}% ", cpu.cpu_usage());
+    let networks = Networks::new_with_refreshed_list();
+    println!("=> networks:");
+    for (interface_name, data) in &networks {
+        println!(
+            "{interface_name}: {}/{} B",
+            data.received(),
+            data.transmitted()
+        );
     }
 }
 
@@ -232,7 +212,18 @@ fn scan_running_proccess() {
 }
 
 fn main() {
-    file_service::get_files_in_directory("./test_files");
-    get_system_preformance();
-    scan_running_proccess();
+    let args = Args::parse();
+    // file_service::get_files_in_directory(&args.path);
+    let folder = file_service::find_largest_files(
+        &args.path,
+        file_service::Folder::new(String::from("Large Files")),
+    );
+    for f in folder.files {
+        println!(
+            "File Name: {}\nFile Size in Mb {}\n",
+            f.name.to_str().unwrap(),
+            f.size
+        );
+    }
+    // scan_running_proccess();
 }
