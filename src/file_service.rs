@@ -1,4 +1,4 @@
-use std::{ffi::OsString, fs, io, os::unix::fs::MetadataExt};
+use std::{ffi::OsString, fs, io};
 
 pub fn get_files_in_directory(path: &str) {
     // Get a list of all entries in the folder
@@ -11,7 +11,7 @@ pub fn get_files_in_directory(path: &str) {
                 if f.path().is_dir() {
                     get_files_in_directory(f.path().to_str().unwrap());
                 } else {
-                    let size_in_mb = f.metadata().unwrap().size() / 1024 / 1024;
+                    let size_in_mb = f.metadata().unwrap().len() / 1024 / 1024;
                     println!(
                         "File Name: {}, Size in Mb {}",
                         f.file_name().to_str().unwrap(),
@@ -62,18 +62,20 @@ impl LargeFile {
 pub struct Folder {
     pub name: String,
     pub files: Vec<LargeFile>,
+    pub folder_size: usize,
 }
 
 impl Folder {
-    pub fn new(name: String) -> Folder {
+    pub fn new(name: String, size: usize) -> Folder {
         Folder {
             name,
             files: Vec::new(),
+            folder_size: size
         }
     }
 
     fn add_file(&mut self, file: LargeFile) {
-        if self.files.len() == 10 {
+        if self.files.len() == self.folder_size {
             self.replace_smallest_file(file)
         } else {
             self.files.push(file);
@@ -89,6 +91,23 @@ impl Folder {
         }
         let index = self.files.iter().position(|x| *x == smallest_file).unwrap();
         self.files[index] = file;
+    }
+    pub fn sort_files(&mut self) {
+        self.files.sort_by(|a, b| {
+            b.size
+                .partial_cmp(&a.size)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+    }
+
+    pub fn print_files(self) {
+        for f in self.files {
+            println!(
+                "File Name: {}\nFile Size in Mb {}\n",
+                f.name.to_str().unwrap(),
+                f.size
+            );
+        };
     }
 }
 
@@ -109,21 +128,29 @@ impl FileCabinet {
 }
 
 pub fn find_largest_files(path: &str, mut folder: Folder) -> Folder {
-    let entries = fs::read_dir(path).unwrap();
-    for file in entries {
-        match file {
-            Ok(f) => {
-                if f.path().is_dir() {
-                    folder = find_largest_files(f.path().to_str().unwrap(), folder);
-                } else {
-                    let size_in_mb = f.metadata().unwrap().size() / 1024 / 1024;
-                    folder.add_file(LargeFile::new(f.file_name(), size_in_mb));
+    let entries = fs::read_dir(path);
+    match entries {
+        Ok(dir_entries) => {
+            for file in dir_entries {
+                match file {
+                    Ok(f) => {
+                        if f.path().is_dir() {
+                            folder = find_largest_files(f.path().to_str().unwrap(), folder);
+                        } else {
+                            let size_in_mb = f.metadata().unwrap().len() / 1024 / 1024;
+                            folder.add_file(LargeFile::new(f.path().into_os_string(), size_in_mb));
+                        }
+                    }
+                    Err(err) => {
+                        println!("Cannot read {} {}", path,err);
+                    }
                 }
             }
-            Err(err) => {
-                println!("{}", err);
-            }
+        }
+        Err(err) => {
+            println!("Cannot read {} {}",path, err);
         }
     }
+
     return folder;
 }

@@ -16,6 +16,8 @@ use clap::Parser;
 struct Args {
     #[arg(short,long,default_value_t = String::from("./test_files"))]
     path: String,
+    #[arg(short,long,default_value_t = 20)]
+    file_count: usize,
 }
 
 struct JoltOutput {
@@ -214,16 +216,11 @@ fn scan_running_proccess() {
 fn main() {
     let args = Args::parse();
     // file_service::get_files_in_directory(&args.path);
-    let folder = file_service::find_largest_files(
+    let mut folder = file_service::find_largest_files(
         &args.path,
-        file_service::Folder::new(String::from("Large Files")),
+        file_service::Folder::new(String::from("Large Files"), args.file_count),
     );
-    for f in folder.files {
-        println!(
-            "File Name: {}\nFile Size in Mb {}\n",
-            f.name.to_str().unwrap(),
-            f.size
-        );
-    }
+    folder.sort_files();
+    folder.print_files();
     // scan_running_proccess();
 }
