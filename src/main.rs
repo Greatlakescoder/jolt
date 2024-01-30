@@ -5,8 +5,12 @@ use csv::ReaderBuilder;
 use prettytable::{Cell, Row, Table};
 use std::{collections::HashMap, sync::atomic::AtomicBool,sync::atomic::Ordering, sync::Arc};
 use std::path::Display;
-use std::process::Command;
+use std::process::Command as OsCommand;
 use sysinfo::{Components, Disks, Networks, System};
+use std::ffi::OsString;
+use std::path::PathBuf;
+
+use clap::{arg, Command};
 
 use clap::Parser;
 
@@ -15,14 +19,14 @@ mod file_service;
 extern crate prettytable;
 
 // /// Simple program to greet a person
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    #[arg(short,long,default_value_t = String::from("./test_files"))]
-    path: String,
-    #[arg(short,long,default_value_t = 20)]
-    file_count: usize,
-}
+// #[derive(Parser, Debug)]
+// #[command(author, version, about, long_about = None)]
+// struct Args {
+//     #[arg(short,long,default_value_t = String::from("./test_files"))]
+//     path: String,
+//     #[arg(short,long,default_value_t = 20)]
+//     file_count: usize,
+// }
 
 struct JoltOutput {
     user: String,
@@ -105,7 +109,7 @@ fn get_network_information() {
 
 #[cfg(target_os = "linux")]
 fn scan_running_proccess() {
-    let output = Command::new("ps")
+    let output = OsCommand::new("ps")
         .arg("-eo")
         .arg("user,pid,%cpu,%mem,vsz,rss,tty,stat,start,time,command")
         .arg("--sort=-user,-%cpu")
@@ -217,14 +221,49 @@ fn scan_running_proccess() {
     table.printstd();
 }
 
+
+fn cli() -> Command {
+    Command::new("jolt")
+        .about("Diagnostic tool to help give your computer that extra jolt")
+        .subcommand_required(true)
+        .arg_required_else_help(true)
+        .allow_external_subcommands(true)
+        .subcommand(
+            Command::new("search")
+                .about("Search for a file")
+                .arg(arg!(-p <PATTERN> "pattern to search for").required(true))
+                .arg(arg!(-d <DIR>"directory to search").required(false).default_value("./test_files")),
+        )
+        .subcommand(
+            Command::new("diagnose")
+                .about("Return System information")
+                .arg(arg!(-d <DIR> "directory to search").default_value("./test_files"))
+                .arg(arg!(-c <COUNT> "number of files to return").required(false).default_value("20"))
+        )
+}
+
 fn main() {
-    let args = Args::parse();
-    // file_service::get_files_in_directory(&args.path);
-    let mut folder = file_service::find_largest_files(
-        &args.path,
-        file_service::Folder::new(String::from("Large Files"), args.file_count),
-    );
-    folder.sort_files();
-    folder.print_files();
-    // scan_running_proccess();
+    let matches = cli().get_matches();
+
+    match matches.subcommand() {
+        Some(("search", sub_matches)) => {
+            let pattern = sub_matches.get_one::<String>("PATTERN").expect("required");
+            let path = sub_matches.get_one::<String>("DIR").unwrap();
+            file_service::grep(path, &pattern);
+        }
+        Some(("diagnose", sub_matches)) => {
+            let path = sub_matches
+                .get_one::<String>("DIR")
+                .map(|s| s.as_str())
+                .expect("defaulted in clap");
+            let file_count = sub_matches
+            .get_one::<String>("COUNT")
+            .expect("defaulted in clap");
+            let file_count = file_count.parse::<usize>().expect("COUNT must be a valid integer");
+            let mut folder = file_service::find_largest_files(path,  file_service::Folder::new(String::from("Large Files"), file_count));
+            folder.sort_files();
+            folder.print_files();
+        }
+        _ => unreachable!()
+    }
 }
