@@ -1,15 +1,16 @@
 use core::fmt;
-use std::thread;
-use std::time::Duration;
 use csv::ReaderBuilder;
 use prettytable::{Cell, Row, Table};
-use std::{collections::HashMap, sync::atomic::AtomicBool,sync::atomic::Ordering, sync::Arc};
-use std::path::Display;
-use std::process::Command as OsCommand;
-use sysinfo::{Components, Disks, Networks, System};
 use std::ffi::OsString;
+use std::path::Display;
 use std::path::PathBuf;
-
+use std::process::Command as OsCommand;
+use std::thread;
+use std::time::Duration;
+use std::{collections::HashMap, sync::atomic::AtomicBool, sync::atomic::Ordering, sync::Arc};
+use sysinfo::{Components, Disks, Networks, System};
+use xml::reader::{EventReader, XmlEvent};
+use serde::Deserialize;
 use clap::{arg, Command};
 
 use clap::Parser;
@@ -27,6 +28,51 @@ extern crate prettytable;
 //     #[arg(short,long,default_value_t = 20)]
 //     file_count: usize,
 // }
+
+#[derive(Debug, Deserialize)]
+struct EventRecord {
+    #[serde(rename = "System")]
+    system: SystemInfo,
+    #[serde(rename = "EventData")]
+    event_data: EventData,
+}
+
+#[derive(Debug, Deserialize)]
+struct SystemInfo {
+    #[serde(rename = "EventID")]
+    event_id: String,
+    #[serde(rename = "TimeCreated")]
+    time_created: TimeCreated,
+    #[serde(rename = "Level")]
+    level: String,
+    #[serde(rename = "Provider")]
+    provider: Provider,
+}
+
+#[derive(Debug, Deserialize)]
+struct Provider {
+    #[serde(rename = "Name")]
+    name: String,
+}
+
+
+#[derive(Debug, Deserialize)]
+struct TimeCreated {
+    #[serde(rename = "SystemTime")]
+    system_time: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct EventData {
+    #[serde(rename = "Data")]
+    data: Vec<Data>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Data {
+    #[serde(rename = "$value")]
+    value: String,
+}
 
 struct JoltOutput {
     user: String,
@@ -74,6 +120,7 @@ impl fmt::Display for JoltOutput {
 
 fn get_system_memory() {
     let mut sys = System::new_all();
+
     sys.refresh_all();
     println!("total memory: {} Mb", sys.total_memory() / 1024 / 1024);
     println!("used memory : {} Mb", sys.used_memory() / 1024 / 1024);
@@ -163,7 +210,7 @@ fn scan_running_proccess() {
 
 #[cfg(target_os = "windows")]
 fn scan_running_proccess() {
-    let output = Command::new("WMIC")
+    let output = OsCommand::new("WMIC")
         .arg("path")
         .arg("Win32_PerfFormattedData_PerfProc_Process")
         .arg("get")
@@ -221,6 +268,51 @@ fn scan_running_proccess() {
     table.printstd();
 }
 
+#[cfg(target_os = "windows")]
+fn read_sys_log() {
+    let output = OsCommand::new("wevtutil")
+        .arg("qe")
+        .arg("System")
+        .arg("/q:*[System[(Level=2)]]")
+        .arg("/c:5")
+        .arg("/rd:true")
+        .arg("/f:xml")
+        .output()
+        .expect("Failed to execute command");
+
+    let output = std::str::from_utf8(&output.stdout).expect("Not UTF8");
+    println!("Output {}",output);
+    // Parse the XML and convert it to JSON
+    let serde_value: Vec<EventRecord> = serde_xml_rs::from_str(output).unwrap();
+    println!("Serde Value {:?}",serde_value);
+    // let json_output = serde_json::to_string_pretty(&serde_value).unwrap();
+    // println!("json Value {:?}",json_output);
+    // // Add array brackets to the JSON string
+    // let json_output = format!("[{}]", json_output);
+
+    // // Deserialize the JSON into a vector of EventRecord structs
+    // let events: Vec<EventRecord> = serde_json::from_str(&json_output).unwrap();
+
+    // for event in events {
+    //     println!("{:?}", event);
+    // }
+
+    // println!("{}",json_output);
+}
+
+#[cfg(target_os = "linux")]
+fn read_sys_log() {
+    let output = OsCommand::new("journalctl")
+        .arg("-p")
+        .arg("err") // Only show error messages
+        .arg("-n") // Number of journal entries to show
+        .arg("5") // Show the last 5 entries
+        .output()
+        .expect("Failed to execute command");
+
+    let output = std::str::from_utf8(&output.stdout).expect("Not UTF8");
+    println!("{}", output);
+}
 
 fn cli() -> Command {
     Command::new("jolt")
@@ -232,14 +324,23 @@ fn cli() -> Command {
             Command::new("search")
                 .about("Search for a file")
                 .arg(arg!(-p <PATTERN> "pattern to search for").required(true))
-                .arg(arg!(-d <DIR>"directory to search").required(false).default_value("./test_files")),
+                .arg(
+                    arg!(-d <DIR>"directory to search")
+                        .required(false)
+                        .default_value("./test_files"),
+                ),
         )
         .subcommand(
-            Command::new("diagnose")
-                .about("Return System information")
+            Command::new("space-finder")
+                .about("Find largest files ")
                 .arg(arg!(-d <DIR> "directory to search").default_value("./test_files"))
-                .arg(arg!(-c <COUNT> "number of files to return").required(false).default_value("20"))
+                .arg(
+                    arg!(-c <COUNT> "number of files to return")
+                        .required(false)
+                        .default_value("20"),
+                ),
         )
+        .subcommand(Command::new("diagnose").about("Return System information"))
 }
 
 fn main() {
@@ -250,20 +351,31 @@ fn main() {
             let pattern = sub_matches.get_one::<String>("PATTERN").expect("required");
             let path = sub_matches.get_one::<String>("DIR").unwrap();
             file_service::grep(path, &pattern);
+            read_sys_log()
         }
-        Some(("diagnose", sub_matches)) => {
+        Some(("space-finder", sub_matches)) => {
             let path = sub_matches
                 .get_one::<String>("DIR")
                 .map(|s| s.as_str())
                 .expect("defaulted in clap");
             let file_count = sub_matches
-            .get_one::<String>("COUNT")
-            .expect("defaulted in clap");
-            let file_count = file_count.parse::<usize>().expect("COUNT must be a valid integer");
-            let mut folder = file_service::find_largest_files(path,  file_service::Folder::new(String::from("Large Files"), file_count));
+                .get_one::<String>("COUNT")
+                .expect("defaulted in clap");
+            let file_count = file_count
+                .parse::<usize>()
+                .expect("COUNT must be a valid integer");
+            let mut folder = file_service::find_largest_files(
+                path,
+                file_service::Folder::new(String::from("Large Files"), file_count),
+            );
             folder.sort_files();
             folder.print_files();
         }
-        _ => unreachable!()
+        Some(("diagnose", sub_matches)) => {
+            scan_running_proccess();
+            get_network_information();
+            get_system_memory();
+        }
+        _ => unreachable!(),
     }
 }

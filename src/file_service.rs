@@ -27,23 +27,28 @@ pub fn get_files_in_directory(path: &str) {
 }
 
 pub fn grep(path: &str, search_term: &str) {
-    let entries = fs::read_dir(path).unwrap();
-
-    // Extract the filenames from the directory entries and store them in a vector
-    for file in entries {
-        match file {
-            Ok(f) => {
-                if f.path().is_dir() {
-                    grep(f.path().to_str().unwrap(), search_term);
-                } else {
-                    if f.file_name().to_str().unwrap().contains(search_term) {
-                        println!("File Name: {}", f.file_name().to_str().unwrap())
+    let entries = fs::read_dir(path);
+    match entries {
+        Ok(dir_entries) => {
+            for file in dir_entries {
+                match file {
+                    Ok(f) => {
+                        if f.path().is_dir() {
+                            grep(f.path().to_str().unwrap(), search_term);
+                        } else {
+                            if f.file_name().to_str().unwrap().contains(search_term) {
+                                println!("File Name: {}", f.file_name().to_str().unwrap())
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        println!("Cannot read {} {}", path,err);
                     }
                 }
             }
-            Err(err) => {
-                println!("{}", err);
-            }
+        }
+        Err(err) => {
+            println!("Cannot read {} {}",path, err);
         }
     }
 }
