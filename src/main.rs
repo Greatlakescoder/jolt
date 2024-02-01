@@ -1,6 +1,8 @@
+use clap::{arg, Command};
 use core::fmt;
 use csv::ReaderBuilder;
 use prettytable::{Cell, Row, Table};
+use serde::Deserialize;
 use std::ffi::OsString;
 use std::path::Display;
 use std::path::PathBuf;
@@ -10,8 +12,6 @@ use std::time::Duration;
 use std::{collections::HashMap, sync::atomic::AtomicBool, sync::atomic::Ordering, sync::Arc};
 use sysinfo::{Components, Disks, Networks, System};
 use xml::reader::{EventReader, XmlEvent};
-use serde::Deserialize;
-use clap::{arg, Command};
 
 use clap::Parser;
 
@@ -33,7 +33,7 @@ extern crate prettytable;
 struct EventRecord {
     #[serde(rename = "System")]
     system: SystemInfo,
-    #[serde(rename = "EventData")]
+    #[serde(rename = "EventData", default = "default_event_data_value")]
     event_data: EventData,
 }
 
@@ -47,6 +47,9 @@ struct SystemInfo {
     level: String,
     #[serde(rename = "Provider")]
     provider: Provider,
+    #[serde(rename = "EventRecordID")]
+    event_record_id: String,
+    
 }
 
 #[derive(Debug, Deserialize)]
@@ -54,7 +57,6 @@ struct Provider {
     #[serde(rename = "Name")]
     name: String,
 }
-
 
 #[derive(Debug, Deserialize)]
 struct TimeCreated {
@@ -64,14 +66,30 @@ struct TimeCreated {
 
 #[derive(Debug, Deserialize)]
 struct EventData {
-    #[serde(rename = "Data")]
+    #[serde(rename = "Data", default = "default_vec_value")]
     data: Vec<Data>,
 }
 
 #[derive(Debug, Deserialize)]
 struct Data {
-    #[serde(rename = "$value")]
+    #[serde(rename = "name", default = "default_value")]
+    name: String,
+    #[serde(rename = "$value", default = "default_value")]
     value: String,
+}
+fn default_value() -> String {
+    "".to_string()
+}
+
+fn default_vec_value() -> Vec<Data> {
+    vec![Data{
+        name: String::from("No Data"),
+        value: String::from("No Data")
+    }]
+}
+
+fn default_event_data_value() -> EventData {
+    EventData{data: default_vec_value()}
 }
 
 struct JoltOutput {
@@ -269,49 +287,73 @@ fn scan_running_proccess() {
 }
 
 #[cfg(target_os = "windows")]
-fn read_sys_log() {
+fn read_sys_log(count: usize) {
     let output = OsCommand::new("wevtutil")
         .arg("qe")
         .arg("System")
         .arg("/q:*[System[(Level=2)]]")
-        .arg("/c:5")
+        .arg(format!("/c:{}", count))
         .arg("/rd:true")
         .arg("/f:xml")
         .output()
         .expect("Failed to execute command");
 
     let output = std::str::from_utf8(&output.stdout).expect("Not UTF8");
-    println!("Output {}",output);
     // Parse the XML and convert it to JSON
-    let serde_value: Vec<EventRecord> = serde_xml_rs::from_str(output).unwrap();
-    println!("Serde Value {:?}",serde_value);
-    // let json_output = serde_json::to_string_pretty(&serde_value).unwrap();
-    // println!("json Value {:?}",json_output);
-    // // Add array brackets to the JSON string
-    // let json_output = format!("[{}]", json_output);
+    let events: Vec<EventRecord> = serde_xml_rs::from_str(output).unwrap();
+    for event in events {
+        println!("{:?}", event);
+    }
+}
 
-    // // Deserialize the JSON into a vector of EventRecord structs
-    // let events: Vec<EventRecord> = serde_json::from_str(&json_output).unwrap();
 
-    // for event in events {
-    //     println!("{:?}", event);
-    // }
+fn read_win_sys_log(search_term: String) {
+    let output = OsCommand::new("wevtutil")
+        .arg("qe")
+        .arg("System")
+        .arg("/rd:true")
+        .arg("/f:xml")
+        .output()
+        .expect("Failed to execute command");
 
-    // println!("{}",json_output);
+    let output = std::str::from_utf8(&output.stdout).expect("Not UTF8");
+    // Parse the XML and convert it to JSON
+    let events: Vec<EventRecord> = serde_xml_rs::from_str(output).unwrap();
+    for event in events {
+        for row in &event.event_data.data {
+            if row.value.contains(&search_term) {
+                println!("{:?}", &event);
+                break;
+            }
+        }
+        
+    }
 }
 
 #[cfg(target_os = "linux")]
-fn read_sys_log() {
+fn read_sys_log(count: usize) {
     let output = OsCommand::new("journalctl")
         .arg("-p")
         .arg("err") // Only show error messages
         .arg("-n") // Number of journal entries to show
-        .arg("5") // Show the last 5 entries
+        .arg(count.to_string()) // Show the last 5 entries
         .output()
         .expect("Failed to execute command");
 
     let output = std::str::from_utf8(&output.stdout).expect("Not UTF8");
     println!("{}", output);
+}
+
+fn search(search_term: &str) {
+    #[cfg(target_os = "linux")]
+    {
+        file_service::grep("/var/log", search_term)
+    }
+
+    #[cfg_attr(rustc_dummy, cfg(target_os = "windows"))]
+    {
+        read_win_sys_log(search_term.to_string());
+    }
 }
 
 fn cli() -> Command {
@@ -331,6 +373,11 @@ fn cli() -> Command {
                 ),
         )
         .subcommand(
+            Command::new("search-logs")
+                .about("Search logs with a pattern")
+                .arg(arg!(-p <PATTERN> "pattern to search for").required(true)),
+        )
+        .subcommand(
             Command::new("space-finder")
                 .about("Find largest files ")
                 .arg(arg!(-d <DIR> "directory to search").default_value("./test_files"))
@@ -339,6 +386,13 @@ fn cli() -> Command {
                         .required(false)
                         .default_value("20"),
                 ),
+        )
+        .subcommand(
+            Command::new("show-errors").about("Show recent errors").arg(
+                arg!(-c <COUNT> "number of files to return")
+                    .required(false)
+                    .default_value("20"),
+            ),
         )
         .subcommand(Command::new("diagnose").about("Return System information"))
 }
@@ -351,7 +405,6 @@ fn main() {
             let pattern = sub_matches.get_one::<String>("PATTERN").expect("required");
             let path = sub_matches.get_one::<String>("DIR").unwrap();
             file_service::grep(path, &pattern);
-            read_sys_log()
         }
         Some(("space-finder", sub_matches)) => {
             let path = sub_matches
@@ -370,6 +423,19 @@ fn main() {
             );
             folder.sort_files();
             folder.print_files();
+        }
+        Some(("show-errors", sub_matches)) => {
+            let file_count = sub_matches
+                .get_one::<String>("COUNT")
+                .expect("defaulted in clap");
+            let file_count = file_count
+                .parse::<usize>()
+                .expect("COUNT must be a valid integer");
+            read_sys_log(file_count);
+        }
+        Some(("search-logs", sub_matches)) => {
+            let pattern = sub_matches.get_one::<String>("PATTERN").expect("required");
+            search(pattern);
         }
         Some(("diagnose", sub_matches)) => {
             scan_running_proccess();
