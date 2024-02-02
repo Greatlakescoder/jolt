@@ -49,7 +49,6 @@ struct SystemInfo {
     provider: Provider,
     #[serde(rename = "EventRecordID")]
     event_record_id: String,
-    
 }
 
 #[derive(Debug, Deserialize)]
@@ -82,14 +81,16 @@ fn default_value() -> String {
 }
 
 fn default_vec_value() -> Vec<Data> {
-    vec![Data{
+    vec![Data {
         name: String::from("No Data"),
-        value: String::from("No Data")
+        value: String::from("No Data"),
     }]
 }
 
 fn default_event_data_value() -> EventData {
-    EventData{data: default_vec_value()}
+    EventData {
+        data: default_vec_value(),
+    }
 }
 
 struct JoltOutput {
@@ -169,6 +170,24 @@ fn get_network_information() {
             data.received(),
             data.transmitted()
         );
+    }
+}
+
+fn kill_process(pid: usize) {
+    #[cfg(unix)]
+    let status = OsCommand::new("kill").arg(pid.to_string()).status().unwrap();
+
+    #[cfg(windows)]
+    let status = OsCommand::new("taskkill")
+        .arg("/F")
+        .arg("/PID")
+        .arg(pid.to_string())
+        .status().unwrap();
+
+    if status.success() {
+        println!("Successfully killed process {}", pid);
+    } else {
+        println!("Failed to kill process {}", pid);
     }
 }
 
@@ -306,7 +325,6 @@ fn read_sys_log(count: usize) {
     }
 }
 
-
 fn read_win_sys_log(search_term: String) {
     let output = OsCommand::new("wevtutil")
         .arg("qe")
@@ -326,7 +344,6 @@ fn read_win_sys_log(search_term: String) {
                 break;
             }
         }
-        
     }
 }
 
@@ -395,6 +412,11 @@ fn cli() -> Command {
             ),
         )
         .subcommand(Command::new("diagnose").about("Return System information"))
+        .subcommand(
+            Command::new("kill-task")
+                .about("Return System information")
+                .arg(arg!(-p --pid <PID> "process id to kill").required(true)),
+        )
 }
 
 fn main() {
@@ -441,6 +463,13 @@ fn main() {
             scan_running_proccess();
             get_network_information();
             get_system_memory();
+        }
+        Some(("kill-task", sub_matches)) => {
+            let pid = sub_matches
+                .get_one::<String>("PID")
+                .expect("required in clap");
+            let pid = pid.parse::<usize>().expect("PID must be a valid integer");
+            kill_process(pid);
         }
         _ => unreachable!(),
     }
