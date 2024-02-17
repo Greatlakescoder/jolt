@@ -1,4 +1,5 @@
 use clap::{arg, Command};
+use file_service::search_engine;
 #[macro_use]
 extern crate prettytable;
 mod component_service;
@@ -30,7 +31,7 @@ fn cli() -> Command {
         .subcommand(
             Command::new("space-finder")
                 .about("Find largest files ")
-                .arg(arg!(-d <DIR> "directory to search").default_value("./test_files"))
+                .arg(arg!(-d <DIR> "directory to search").default_value(""))
                 .arg(
                     arg!(-c <COUNT> "number of files to return")
                         .required(false)
@@ -72,12 +73,14 @@ fn main() {
             let file_count = file_count
                 .parse::<usize>()
                 .expect("COUNT must be a valid integer");
-            let mut folder = file_service::find_largest_files(
-                path,
-                file_service::Folder::new(String::from("Large Files"), file_count),
-            );
-            folder.sort_files();
-            folder.print_files();
+
+            search_engine();
+            // let mut folder = file_service::search_engine(
+            //     path,
+            //     file_service::Folder::new(String::from("Large Files"), file_count),
+            // );
+            // folder.sort_files();
+            // folder.print_files();
         }
         Some(("show-errors", sub_matches)) => {
             let file_count = sub_matches

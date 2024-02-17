@@ -52,24 +52,24 @@ impl fmt::Display for JoltOutput {
 // table.add_row(row![
 //     "User", "PID", "%CPU", "%MEM", "VSZ", "RSS", "TTY", "STAT", "START", "TIME", "COMMAND"
 // ]);
-impl MagicTable for JoltOutput {
-    fn build_table(&self) -> Vec<(String, String)> {
-        vec![
-            ("User".to_string(), self.user.to_string()),
-            ("PID".to_string(), self.pid.to_string()),
-            ("%CPU".to_string(), self.cpu.to_string()),
-            ("%MEM".to_string(), self.mem.to_string()),
-            ("VSZ".to_string(), self.vsz.to_string()),
-            ("RSS".to_string(), self.rss.to_string()),
-            ("TTY".to_string(), self.tty.to_string()),
-            ("STAT".to_string(), self.stat.to_string()),
-            ("START".to_string(), self.start.to_string()),
-            ("TIME".to_string(), self.time.to_string()),
-            ("COMMAND".to_string(), self.command.to_string()),
-        ]
-    }
+// impl MagicTable for JoltOutput {
+//     fn build_table(&self) -> Vec<(String, String)> {
+//         vec![
+//             ("User".to_string(), self.user.to_string()),
+//             ("PID".to_string(), self.pid.to_string()),
+//             ("%CPU".to_string(), self.cpu.to_string()),
+//             ("%MEM".to_string(), self.mem.to_string()),
+//             ("VSZ".to_string(), self.vsz.to_string()),
+//             ("RSS".to_string(), self.rss.to_string()),
+//             ("TTY".to_string(), self.tty.to_string()),
+//             ("STAT".to_string(), self.stat.to_string()),
+//             ("START".to_string(), self.start.to_string()),
+//             ("TIME".to_string(), self.time.to_string()),
+//             ("COMMAND".to_string(), self.command.to_string()),
+//         ]
+//     }
 
-}
+// }
 
 pub fn get_system_memory() {
     let mut sys = System::new_all();
@@ -126,6 +126,20 @@ pub fn kill_process(pid: usize) {
         println!("Successfully killed process {}", pid);
     } else {
         println!("Failed to kill process {}", pid);
+    }
+}
+
+pub fn network_scan() {
+    let mut sys = System::new_all();
+    sys.refresh_all();
+    let networks = Networks::new_with_refreshed_list();
+    println!("=> networks:");
+    for (interface_name, data) in &networks {
+        println!(
+            "{interface_name}: {}/{} B",
+            data.received(),
+            data.transmitted()
+        );
     }
 }
 

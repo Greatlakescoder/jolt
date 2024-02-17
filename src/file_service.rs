@@ -1,57 +1,11 @@
+use core::fmt;
+use std::sync::mpsc::{self, Sender, Receiver};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::thread::{self, JoinHandle};
 use std::{ffi::OsString, fs, io};
+use sysinfo::{Disks, System};
 
-pub fn get_files_in_directory(path: &str) {
-    // Get a list of all entries in the folder
-    let entries = fs::read_dir(path).unwrap();
-
-    // Extract the filenames from the directory entries and store them in a vector
-    for file in entries {
-        match file {
-            Ok(f) => {
-                if f.path().is_dir() {
-                    get_files_in_directory(f.path().to_str().unwrap());
-                } else {
-                    let size_in_mb = f.metadata().unwrap().len() / 1024 / 1024;
-                    println!(
-                        "File Name: {}, Size in Mb {}",
-                        f.file_name().to_str().unwrap(),
-                        size_in_mb
-                    )
-                }
-            }
-            Err(err) => {
-                println!("{}", err);
-            }
-        }
-    }
-}
-
-pub fn grep(path: &str, search_term: &str) {
-    let entries = fs::read_dir(path);
-    match entries {
-        Ok(dir_entries) => {
-            for file in dir_entries {
-                match file {
-                    Ok(f) => {
-                        if f.path().is_dir() {
-                            grep(f.path().to_str().unwrap(), search_term);
-                        } else {
-                            if f.file_name().to_str().unwrap().contains(search_term) {
-                                println!("File Name: {}", f.file_name().to_str().unwrap())
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        println!("Cannot read {} {}", path,err);
-                    }
-                }
-            }
-        }
-        Err(err) => {
-            println!("Cannot read {} {}",path, err);
-        }
-    }
-}
 #[derive(PartialEq, Clone)]
 pub struct LargeFile {
     pub name: OsString,
@@ -71,11 +25,11 @@ pub struct Folder {
 }
 
 impl Folder {
-    pub fn new(name: String, size: usize) -> Folder {
+    pub fn new(name: String, folder_size: usize) -> Folder {
         Folder {
             name,
             files: Vec::new(),
-            folder_size: size
+            folder_size: folder_size,
         }
     }
 
@@ -106,33 +60,18 @@ impl Folder {
     }
 
     pub fn print_files(self) {
+        println!("----------- Files in {} -----------\n", self.name);
         for f in self.files {
             println!(
                 "File Name: {}\nFile Size in Mb {}\n",
                 f.name.to_str().unwrap(),
                 f.size
             );
-        };
-    }
-}
-
-struct FileCabinet {
-    folders: Vec<Folder>,
-}
-
-impl FileCabinet {
-    fn new() -> FileCabinet {
-        FileCabinet {
-            folders: Vec::new(),
         }
     }
-
-    fn add_folder(&mut self, folder: Folder) {
-        self.folders.push(folder);
-    }
 }
 
-pub fn find_largest_files(path: &str, mut folder: Folder) -> Folder {
+pub fn grep(path: &str, search_term: &str) {
     let entries = fs::read_dir(path);
     match entries {
         Ok(dir_entries) => {
@@ -140,22 +79,130 @@ pub fn find_largest_files(path: &str, mut folder: Folder) -> Folder {
                 match file {
                     Ok(f) => {
                         if f.path().is_dir() {
-                            folder = find_largest_files(f.path().to_str().unwrap(), folder);
+                            grep(f.path().to_str().unwrap(), search_term);
                         } else {
-                            let size_in_mb = f.metadata().unwrap().len() / 1024 / 1024;
-                            folder.add_file(LargeFile::new(f.path().into_os_string(), size_in_mb));
+                            if f.file_name().to_str().unwrap().contains(search_term) {
+                                println!("File Name: {}", f.file_name().to_str().unwrap())
+                            }
                         }
                     }
                     Err(err) => {
-                        println!("Cannot read {} {}", path,err);
+                        println!("Cannot read {} {}", path, err);
                     }
                 }
             }
         }
         Err(err) => {
-            println!("Cannot read {} {}",path, err);
+            println!("Cannot read {} {}", path, err);
         }
     }
-
-    return folder;
 }
+
+/*
+   This is the main function, we want to find the largest files on a hostmachine and report that back to the user
+   - - - - - - - Steps - - - - - - - - -
+   1. If they dont pass use a directory we should find the largest file across avaliable disks - default behavior
+   2. Once we have the avaliable disks we create threads per disks to determine the largest files on those disks
+   3. We want to report to the user the progress as we process the directories
+       a. As of 2/17 this will just be updated as we finsh one level down from parent directory
+   4. Result will be top 10 largest files per disk
+*/
+
+struct SearchEngine {
+    disks_to_search: Vec<PathBuf>,
+    fi
+}
+
+fn get_avaliable_disks() -> Vec<PathBuf> {
+    let disks = Disks::new_with_refreshed_list();
+
+    let mut paths: Vec<PathBuf> = vec![];
+
+    for disk in disks.list() {
+        paths.push(disk.mount_point().to_path_buf());
+    }
+    paths
+}
+
+pub fn search_engine() {
+    let host_disks = get_avaliable_disks();
+    let mut disk_handles: Vec<JoinHandle<()>> = vec![];
+    for p in host_disks {
+        if p.starts_with("/usr/lib/wsl/drivers")
+            || p.starts_with("/usr/lib/wsl/lib")
+            || p.starts_with("/mnt/wslg/distro")
+            || p.starts_with("/mnt/wslg/doc")
+        {
+            continue;
+        }
+        let dh = thread::spawn(move || find_directories_for_path(&p));
+        disk_handles.push(dh);
+    }
+    for d in disk_handles.drain(..) {
+        let _ = d.join();
+    }
+}
+/*
+   This function will find any directories for the given path, if there are also files in here it will
+   send them to a channel to be processed, essentially this function should only be trying to find directories
+*/
+fn find_directories_for_path(path: &Path) {
+    let entries = fs::read_dir(path);
+    match entries {
+        Ok(dir_entries) => {
+            for file in dir_entries {
+                match file {
+                    Ok(f) => {
+                        if f.path().is_dir() {
+                            find_directories_for_path(&f.path())
+                        } else {
+                            println!("Reached end of directory");
+                            //TODO Send to channel to be proccessed
+                            // let size_in_mb = f.metadata().unwrap().len() / 1024 / 1024;
+                            // folder.add_file(LargeFile::new(f.path().into_os_string(), size_in_mb));
+                        }
+                    }
+                    Err(err) => {
+                        println!("Cannot read {:?} {}", path, err);
+                    }
+                }
+            }
+        }
+        Err(err) => {
+            println!("Cannot read {:?} {}", path, err);
+        }
+    }
+}
+
+// pub fn find_largest_files(path: &str, mut folder: Folder) -> Folder {
+//     // If path is blank/empty we need to show directories instead of files
+//     if path == "" {
+//         find_largest_directories(path, folder.clone());
+//         return folder;
+//     }
+//     let entries = fs::read_dir(path);
+//     match entries {
+//         Ok(dir_entries) => {
+//             for file in dir_entries {
+//                 match file {
+//                     Ok(f) => {
+//                         if f.path().is_dir() {
+//                             folder = find_largest_files(f.path().to_str().unwrap(), folder);
+//                         } else {
+//                             let size_in_mb = f.metadata().unwrap().len() / 1024 / 1024;
+//                             folder.add_file(LargeFile::new(f.path().into_os_string(), size_in_mb));
+//                         }
+//                     }
+//                     Err(err) => {
+//                         println!("Cannot read {} {}", path, err);
+//                     }
+//                 }
+//             }
+//         }
+//         Err(err) => {
+//             println!("Cannot read {} {}", path, err);
+//         }
+//     }
+
+//     return folder;
+// }
