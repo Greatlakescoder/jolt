@@ -1,6 +1,6 @@
 use core::fmt;
-use std::sync::mpsc::{self, Sender, Receiver};
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::{ffi::OsString, fs, io};
@@ -110,9 +110,20 @@ pub fn grep(path: &str, search_term: &str) {
 
 struct SearchEngine {
     disks_to_search: Vec<PathBuf>,
-    fi
+    tx: Sender<PathBuf>,
+    rx: Receiver<PathBuf>,
 }
 
+impl SearchEngine {
+    fn new() -> SearchEngine {
+        let (tx, rx) = mpsc::channel();
+        SearchEngine {
+            disks_to_search: get_avaliable_disks(),
+            tx,
+            rx,
+        }
+    }
+}
 fn get_avaliable_disks() -> Vec<PathBuf> {
     let disks = Disks::new_with_refreshed_list();
 
@@ -125,9 +136,9 @@ fn get_avaliable_disks() -> Vec<PathBuf> {
 }
 
 pub fn search_engine() {
-    let host_disks = get_avaliable_disks();
+    let engine = SearchEngine::new();
     let mut disk_handles: Vec<JoinHandle<()>> = vec![];
-    for p in host_disks {
+    for p in engine.disks_to_search {
         if p.starts_with("/usr/lib/wsl/drivers")
             || p.starts_with("/usr/lib/wsl/lib")
             || p.starts_with("/mnt/wslg/distro")
@@ -135,8 +146,15 @@ pub fn search_engine() {
         {
             continue;
         }
-        let dh = thread::spawn(move || find_directories_for_path(&p));
+        let tx = engine.tx.clone();
+        let dh = thread::spawn(move || {
+            find_directories_for_path(&p, tx);
+        });
         disk_handles.push(dh);
+    }
+
+    for received in engine.rx {
+        println!("Received: {:?}", received);
     }
     for d in disk_handles.drain(..) {
         let _ = d.join();
@@ -146,7 +164,7 @@ pub fn search_engine() {
    This function will find any directories for the given path, if there are also files in here it will
    send them to a channel to be processed, essentially this function should only be trying to find directories
 */
-fn find_directories_for_path(path: &Path) {
+fn find_directories_for_path(path: &Path, tx: Sender<PathBuf>) {
     let entries = fs::read_dir(path);
     match entries {
         Ok(dir_entries) => {
@@ -154,9 +172,9 @@ fn find_directories_for_path(path: &Path) {
                 match file {
                     Ok(f) => {
                         if f.path().is_dir() {
-                            find_directories_for_path(&f.path())
+                            find_directories_for_path(&f.path(), tx.clone())
                         } else {
-                            println!("Reached end of directory");
+                            tx.send(f.path()).unwrap();
                             //TODO Send to channel to be proccessed
                             // let size_in_mb = f.metadata().unwrap().len() / 1024 / 1024;
                             // folder.add_file(LargeFile::new(f.path().into_os_string(), size_in_mb));
