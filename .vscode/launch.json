@@ -19,7 +19,7 @@
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": ["space-finder"],
             "cwd": "${workspaceFolder}"
         },
         {
@@ -38,7 +38,7 @@
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": ["space-finder"],
             "cwd": "${workspaceFolder}"
         }
     ]

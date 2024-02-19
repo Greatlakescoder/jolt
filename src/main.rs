@@ -31,7 +31,7 @@ fn cli() -> Command {
         .subcommand(
             Command::new("space-finder")
                 .about("Find largest files ")
-                .arg(arg!(-d <DIR> "directory to search").default_value(""))
+                .arg(arg!(-d <DIR> "directory to search").default_value("/home/hedrickw/dev/jolt/test_files"))
                 .arg(
                     arg!(-c <COUNT> "number of files to return")
                         .required(false)
@@ -74,7 +74,7 @@ fn main() {
                 .parse::<usize>()
                 .expect("COUNT must be a valid integer");
 
-            search_engine();
+            search_engine(&path);
             // let mut folder = file_service::search_engine(
             //     path,
             //     file_service::Folder::new(String::from("Large Files"), file_count),

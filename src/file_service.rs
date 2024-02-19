@@ -5,15 +5,16 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::{ffi::OsString, fs, io};
 use sysinfo::{Disks, System};
+use std::time::Duration;
 
 #[derive(PartialEq, Clone)]
 pub struct LargeFile {
-    pub name: OsString,
+    pub name: String,
     pub size: u64,
 }
 
 impl LargeFile {
-    pub fn new(name: OsString, size: u64) -> LargeFile {
+    pub fn new(name: String, size: u64) -> LargeFile {
         LargeFile { name, size }
     }
 }
@@ -62,11 +63,7 @@ impl Folder {
     pub fn print_files(self) {
         println!("----------- Files in {} -----------\n", self.name);
         for f in self.files {
-            println!(
-                "File Name: {}\nFile Size in Mb {}\n",
-                f.name.to_str().unwrap(),
-                f.size
-            );
+            println!("File Name: {}\nFile Size in Mb {}\n", f.name, f.size);
         }
     }
 }
@@ -115,29 +112,35 @@ struct SearchEngine {
 }
 
 impl SearchEngine {
-    fn new() -> SearchEngine {
+    fn new(defined_path: &str) -> SearchEngine {
         let (tx, rx) = mpsc::channel();
         SearchEngine {
-            disks_to_search: get_avaliable_disks(),
+            disks_to_search: get_avaliable_disks(defined_path),
             tx,
             rx,
         }
     }
 }
-fn get_avaliable_disks() -> Vec<PathBuf> {
-    let disks = Disks::new_with_refreshed_list();
-
+fn get_avaliable_disks(defined_path: &str) -> Vec<PathBuf> {
     let mut paths: Vec<PathBuf> = vec![];
-
-    for disk in disks.list() {
-        paths.push(disk.mount_point().to_path_buf());
+    if defined_path == "" {
+        let disks = Disks::new_with_refreshed_list();
+        for disk in disks.list() {
+            paths.push(disk.mount_point().to_path_buf());
+        }
+    }else {
+        paths.push(PathBuf::from(defined_path))
     }
     paths
+
+  
 }
 
-pub fn search_engine() {
-    let engine = SearchEngine::new();
+pub fn search_engine(defined_path: &str) {
+    let engine = SearchEngine::new(defined_path);
+    println!("Search starting at {}",defined_path);
     let mut disk_handles: Vec<JoinHandle<()>> = vec![];
+    let mut folder = Folder::new("Test".to_string(), 10);
     for p in engine.disks_to_search {
         if p.starts_with("/usr/lib/wsl/drivers")
             || p.starts_with("/usr/lib/wsl/lib")
@@ -153,12 +156,28 @@ pub fn search_engine() {
         disk_handles.push(dh);
     }
 
-    for received in engine.rx {
-        println!("Received: {:?}", received);
+    /*
+        We need to do a recv timeout so we are not waiting infinetly since engine.rc.recv will block
+     */
+    while let Ok(file_received) = engine.rx.recv_timeout(Duration::from_secs(1)){
+        let size_in_mb = file_received.metadata();
+        match size_in_mb {
+            Ok(meta) => {
+                if meta.is_file() {
+                    let size_in_mb = meta.len() / 1024 / 1024;
+                    folder.add_file(LargeFile::new(
+                        file_received.to_str().unwrap().to_string(),
+                        size_in_mb,
+                    ));
+                }
+            }
+            Err(err) => {
+                println!("Cannot read {:?} {}", file_received, err);
+            }
+        }
     }
-    for d in disk_handles.drain(..) {
-        let _ = d.join();
-    }
+    folder.print_files()
+ 
 }
 /*
    This function will find any directories for the given path, if there are also files in here it will
@@ -175,9 +194,6 @@ fn find_directories_for_path(path: &Path, tx: Sender<PathBuf>) {
                             find_directories_for_path(&f.path(), tx.clone())
                         } else {
                             tx.send(f.path()).unwrap();
-                            //TODO Send to channel to be proccessed
-                            // let size_in_mb = f.metadata().unwrap().len() / 1024 / 1024;
-                            // folder.add_file(LargeFile::new(f.path().into_os_string(), size_in_mb));
                         }
                     }
                     Err(err) => {
