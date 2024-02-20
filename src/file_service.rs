@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 use std::{ffi::OsString, fs, io};
 use sysinfo::{Disks, System};
-use std::time::Duration;
 
 #[derive(PartialEq, Clone)]
 pub struct LargeFile {
@@ -109,6 +109,7 @@ struct SearchEngine {
     disks_to_search: Vec<PathBuf>,
     tx: Sender<PathBuf>,
     rx: Receiver<PathBuf>,
+    thread_pool: Arc<Mutex<i32>>,
 }
 
 impl SearchEngine {
@@ -118,6 +119,7 @@ impl SearchEngine {
             disks_to_search: get_avaliable_disks(defined_path),
             tx,
             rx,
+            thread_pool: Arc::new(Mutex::new(0)),
         }
     }
 }
@@ -128,17 +130,15 @@ fn get_avaliable_disks(defined_path: &str) -> Vec<PathBuf> {
         for disk in disks.list() {
             paths.push(disk.mount_point().to_path_buf());
         }
-    }else {
+    } else {
         paths.push(PathBuf::from(defined_path))
     }
     paths
-
-  
 }
 
 pub fn search_engine(defined_path: &str) {
     let engine = SearchEngine::new(defined_path);
-    println!("Search starting at {}",defined_path);
+    println!("Search starting at {}", defined_path);
     let mut disk_handles: Vec<JoinHandle<()>> = vec![];
     let mut folder = Folder::new("Test".to_string(), 10);
     for p in engine.disks_to_search {
@@ -150,16 +150,17 @@ pub fn search_engine(defined_path: &str) {
             continue;
         }
         let tx = engine.tx.clone();
-        let dh = thread::spawn(move || {
-            find_directories_for_path(&p, tx);
+        let thread_pooler = engine.thread_pool.clone();
+        let dh: JoinHandle<()> = thread::spawn(move || {
+            find_directories_for_path(&p, tx, thread_pooler);
         });
         disk_handles.push(dh);
     }
 
     /*
-        We need to do a recv timeout so we are not waiting infinetly since engine.rc.recv will block
-     */
-    while let Ok(file_received) = engine.rx.recv_timeout(Duration::from_secs(1)){
+       We need to do a recv timeout so we are not waiting infinetly since engine.rc.recv will block
+    */
+    while let Ok(file_received) = engine.rx.recv_timeout(Duration::from_secs(1)) {
         let size_in_mb = file_received.metadata();
         match size_in_mb {
             Ok(meta) => {
@@ -177,23 +178,47 @@ pub fn search_engine(defined_path: &str) {
         }
     }
     folder.print_files()
- 
 }
 /*
    This function will find any directories for the given path, if there are also files in here it will
    send them to a channel to be processed, essentially this function should only be trying to find directories
 */
-fn find_directories_for_path(path: &Path, tx: Sender<PathBuf>) {
+fn find_directories_for_path(path: &Path, tx: Sender<PathBuf>, thread_pool: Arc<Mutex<i32>>) {
     let entries = fs::read_dir(path);
     match entries {
         Ok(dir_entries) => {
             for file in dir_entries {
                 match file {
                     Ok(f) => {
+                        let directory_sender = tx.clone();
                         if f.path().is_dir() {
-                            find_directories_for_path(&f.path(), tx.clone())
+                            let mut thread_count = thread_pool.lock().unwrap();
+                            if *thread_count < 10 {
+                                *thread_count += 1;
+                                println!("Spawning Thread");
+                                drop(thread_count); // Drop the lock before spawning the thread
+                                let thread_pooler = thread_pool.clone();
+                                thread::spawn(move || {
+                                    println!("Searching dir {:?}",&f.path());
+                                    find_directories_for_path(
+                                        &f.path(),
+                                        directory_sender,
+                                        thread_pooler,
+                                    );
+                                });
+                            } else {
+                                println!("Searching dir {:?}",&f.path());
+                                find_directories_for_path(
+                                    &f.path(),
+                                    directory_sender,
+                                    thread_pool.clone(),
+                                );
+                            }
                         } else {
-                            tx.send(f.path()).unwrap();
+                            let mut thread_count = thread_pool.lock().unwrap();
+                            *thread_count -= 1;
+                            println!("Removing thread from thread pool");
+                            directory_sender.send(f.path()).unwrap();
                         }
                     }
                     Err(err) => {

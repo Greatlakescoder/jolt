@@ -31,7 +31,7 @@ fn cli() -> Command {
         .subcommand(
             Command::new("space-finder")
                 .about("Find largest files ")
-                .arg(arg!(-d <DIR> "directory to search").default_value("/home/hedrickw/dev/jolt/test_files"))
+                .arg(arg!(-d <DIR> "directory to search").default_value("./test_files"))
                 .arg(
                     arg!(-c <COUNT> "number of files to return")
                         .required(false)
