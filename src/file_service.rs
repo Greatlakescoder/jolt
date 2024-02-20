@@ -160,7 +160,7 @@ pub fn search_engine(defined_path: &str) {
     /*
        We need to do a recv timeout so we are not waiting infinetly since engine.rc.recv will block
     */
-    while let Ok(file_received) = engine.rx.recv_timeout(Duration::from_secs(1)) {
+    while let Ok(file_received) = engine.rx.recv_timeout(Duration::from_secs(5)) {
         let size_in_mb = file_received.metadata();
         match size_in_mb {
             Ok(meta) => {
@@ -191,23 +191,24 @@ fn find_directories_for_path(path: &Path, tx: Sender<PathBuf>, thread_pool: Arc<
                 match file {
                     Ok(f) => {
                         let directory_sender = tx.clone();
+                        let mut thread_count = thread_pool.lock().unwrap();
                         if f.path().is_dir() {
-                            let mut thread_count = thread_pool.lock().unwrap();
-                            if *thread_count < 10 {
+                            if *thread_count < 30 {
                                 *thread_count += 1;
-                                println!("Spawning Thread");
                                 drop(thread_count); // Drop the lock before spawning the thread
+
                                 let thread_pooler = thread_pool.clone();
-                                thread::spawn(move || {
-                                    println!("Searching dir {:?}",&f.path());
+                                let jh = thread::spawn(move || {
                                     find_directories_for_path(
                                         &f.path(),
                                         directory_sender,
-                                        thread_pooler,
+                                        thread_pooler.clone(),
                                     );
+                                    let mut thread_count = thread_pooler.lock().unwrap();
+                                    *thread_count -= 1;
                                 });
                             } else {
-                                println!("Searching dir {:?}",&f.path());
+                                drop(thread_count);
                                 find_directories_for_path(
                                     &f.path(),
                                     directory_sender,
@@ -215,9 +216,6 @@ fn find_directories_for_path(path: &Path, tx: Sender<PathBuf>, thread_pool: Arc<
                                 );
                             }
                         } else {
-                            let mut thread_count = thread_pool.lock().unwrap();
-                            *thread_count -= 1;
-                            println!("Removing thread from thread pool");
                             directory_sender.send(f.path()).unwrap();
                         }
                     }
