@@ -23,6 +23,7 @@ pub struct Folder {
     pub name: String,
     pub files: Vec<LargeFile>,
     pub folder_size: usize,
+    pub total_files_seen: usize
 }
 
 impl Folder {
@@ -31,6 +32,7 @@ impl Folder {
             name,
             files: Vec::new(),
             folder_size: folder_size,
+            total_files_seen: 0
         }
     }
 
@@ -65,6 +67,7 @@ impl Folder {
         for f in self.files {
             println!("File Name: {}\nFile Size in Mb {}\n", f.name, f.size);
         }
+        println!("Total files analyzed: {}", self.total_files_seen);
     }
 }
 
@@ -166,10 +169,15 @@ pub fn search_engine(defined_path: &str) {
             Ok(meta) => {
                 if meta.is_file() {
                     let size_in_mb = meta.len() / 1024 / 1024;
-                    folder.add_file(LargeFile::new(
+                    let user_file: LargeFile = LargeFile::new(
                         file_received.to_str().unwrap().to_string(),
-                        size_in_mb,
-                    ));
+                        size_in_mb);
+                    if folder.files.len() > folder.folder_size {
+                        folder.replace_smallest_file(user_file)
+                    }else {
+                        folder.add_file(user_file);
+                    }
+                    folder.total_files_seen += 1;
                 }
             }
             Err(err) => {
@@ -193,7 +201,7 @@ fn find_directories_for_path(path: &Path, tx: Sender<PathBuf>, thread_pool: Arc<
                         let directory_sender = tx.clone();
                         let mut thread_count = thread_pool.lock().unwrap();
                         if f.path().is_dir() {
-                            if *thread_count < 30 {
+                            if *thread_count < 10 {
                                 *thread_count += 1;
                                 drop(thread_count); // Drop the lock before spawning the thread
 
@@ -230,36 +238,3 @@ fn find_directories_for_path(path: &Path, tx: Sender<PathBuf>, thread_pool: Arc<
         }
     }
 }
-
-// pub fn find_largest_files(path: &str, mut folder: Folder) -> Folder {
-//     // If path is blank/empty we need to show directories instead of files
-//     if path == "" {
-//         find_largest_directories(path, folder.clone());
-//         return folder;
-//     }
-//     let entries = fs::read_dir(path);
-//     match entries {
-//         Ok(dir_entries) => {
-//             for file in dir_entries {
-//                 match file {
-//                     Ok(f) => {
-//                         if f.path().is_dir() {
-//                             folder = find_largest_files(f.path().to_str().unwrap(), folder);
-//                         } else {
-//                             let size_in_mb = f.metadata().unwrap().len() / 1024 / 1024;
-//                             folder.add_file(LargeFile::new(f.path().into_os_string(), size_in_mb));
-//                         }
-//                     }
-//                     Err(err) => {
-//                         println!("Cannot read {} {}", path, err);
-//                     }
-//                 }
-//             }
-//         }
-//         Err(err) => {
-//             println!("Cannot read {} {}", path, err);
-//         }
-//     }
-
-//     return folder;
-// }
