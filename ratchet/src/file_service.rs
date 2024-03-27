@@ -1,29 +1,24 @@
 use std::{ffi::OsString, fs, io};
 
-pub fn get_files_in_directory(path: &str) {
+pub fn get_files_in_directory(path: &str) -> io::Result<()> {
     // Get a list of all entries in the folder
     let entries = fs::read_dir(path).unwrap();
 
     // Extract the filenames from the directory entries and store them in a vector
     for file in entries {
-        match file {
-            Ok(f) => {
-                if f.path().is_dir() {
-                    get_files_in_directory(f.path().to_str().unwrap());
-                } else {
-                    let size_in_mb = f.metadata().unwrap().len() / 1024 / 1024;
-                    println!(
-                        "File Name: {}, Size in Mb {}",
-                        f.file_name().to_str().unwrap(),
-                        size_in_mb
-                    )
-                }
-            }
-            Err(err) => {
-                println!("{}", err);
-            }
+        let f = file?;
+        if f.path().is_dir() {
+            get_files_in_directory(f.path().to_str().unwrap())?;
+        } else {
+            let size_in_mb = f.metadata().unwrap().len() / 1024 / 1024;
+            println!(
+                "File Name: {}, Size in Mb {}",
+                f.file_name().to_str().unwrap(),
+                size_in_mb
+            )
         }
     }
+    Ok(())
 }
 
 pub fn grep(path: &str, search_term: &str) {
@@ -42,13 +37,13 @@ pub fn grep(path: &str, search_term: &str) {
                         }
                     }
                     Err(err) => {
-                        println!("Cannot read {} {}", path,err);
+                        println!("Cannot read {} {}", path, err);
                     }
                 }
             }
         }
         Err(err) => {
-            println!("Cannot read {} {}",path, err);
+            println!("Cannot read {} {}", path, err);
         }
     }
 }
@@ -75,7 +70,7 @@ impl Folder {
         Folder {
             name,
             files: Vec::new(),
-            folder_size: size
+            folder_size: size,
         }
     }
 
@@ -112,7 +107,7 @@ impl Folder {
                 f.name.to_str().unwrap(),
                 f.size
             );
-        };
+        }
     }
 }
 
@@ -147,13 +142,13 @@ pub fn find_largest_files(path: &str, mut folder: Folder) -> Folder {
                         }
                     }
                     Err(err) => {
-                        println!("Cannot read {} {}", path,err);
+                        println!("Cannot read {} {}", path, err);
                     }
                 }
             }
         }
         Err(err) => {
-            println!("Cannot read {} {}",path, err);
+            println!("Cannot read {} {}", path, err);
         }
     }
 
