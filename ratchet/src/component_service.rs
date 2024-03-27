@@ -1,11 +1,13 @@
 use core::fmt;
 use prettytable::{Cell, Row, Table};
+use serde::{Deserialize, Serialize};
 use std::process::Command as OsCommand;
 use sysinfo::{Components, Disks, Networks, System};
 
 use crate::table_builder::MagicTable;
 
-struct JoltOutput {
+#[derive(Serialize, Deserialize)]
+pub struct JoltOutput {
     user: String,
     pid: String,
     cpu: String,
@@ -68,7 +70,6 @@ impl MagicTable for JoltOutput {
             ("COMMAND".to_string(), self.command.to_string()),
         ]
     }
-
 }
 
 pub fn get_system_memory() {
@@ -130,7 +131,7 @@ pub fn kill_process(pid: usize) {
 }
 
 #[cfg(target_os = "linux")]
-pub fn scan_running_proccess() {
+pub fn scan_running_proccess() -> Vec<JoltOutput> {
     let output = OsCommand::new("ps")
         .arg("-eo")
         .arg("user,pid,%cpu,%mem,vsz,rss,tty,stat,start,time,command")
@@ -145,6 +146,7 @@ pub fn scan_running_proccess() {
         "User", "PID", "%CPU", "%MEM", "VSZ", "RSS", "TTY", "STAT", "START", "TIME", "COMMAND"
     ]);
 
+    let mut output: Vec<JoltOutput> = vec![];
     for record in records.iter().skip(1) {
         let fields: Vec<&str> = record.split_whitespace().collect();
         if fields.len() < 11 {
@@ -177,10 +179,12 @@ pub fn scan_running_proccess() {
             Cell::new(&new_record.time),
             Cell::new(&new_record.command),
         ]));
+        output.push(new_record);
         // println!("{} \n ", new_record);
     }
     table.printstd();
     // println!("{:?}", records)
+    return output;
 }
 
 #[cfg(target_os = "windows")]
