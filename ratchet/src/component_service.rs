@@ -132,117 +132,95 @@ pub fn kill_process(pid: usize) {
 
 #[cfg(target_os = "linux")]
 pub fn scan_running_proccess() -> Vec<JoltOutput> {
-    let output = OsCommand::new("ps")
-        .arg("-eo")
-        .arg("user,pid,%cpu,%mem,vsz,rss,tty,stat,start,time,command")
-        .arg("--sort=-user,-%cpu")
-        .output()
-        .expect("failed to execute process");
-    // Cow stands for clone on write and is a smart pointer that allows you to have either a reference to some data or the data itself.
-    let output = String::from_utf8_lossy(&output.stdout);
-    let records = output.split("\n").collect::<Vec<&str>>();
-    let mut table = Table::new();
-    table.add_row(row![
-        "User", "PID", "%CPU", "%MEM", "VSZ", "RSS", "TTY", "STAT", "START", "TIME", "COMMAND"
-    ]);
+    // let output = if cfg!(target_os = "windows") {
+    //     Command::new("cmd")
+    //         .args(["/C", "echo hello"])
+    //         .output()
+    //         .expect("failed to execute process")
+    // } else {
+    //     Command::new("sh")
+    //         .arg("-c")
+    //         .arg("echo hello")
+    //         .output()
+    //         .expect("failed to execute process")
+    // };
 
-    let mut output: Vec<JoltOutput> = vec![];
-    for record in records.iter().skip(1) {
-        let fields: Vec<&str> = record.split_whitespace().collect();
-        if fields.len() < 11 {
-            continue;
+    if cfg!(target_os = "linux") {
+        let output = OsCommand::new("ps")
+            .arg("-eo")
+            .arg("user,pid,%cpu,%mem,vsz,rss,tty,stat,start,time,command")
+            .arg("--sort=-user,-%cpu")
+            .output()
+            .expect("failed to execute process");
+        // Cow stands for clone on write and is a smart pointer that allows you to have either a reference to some data or the data itself.
+        let output = String::from_utf8_lossy(&output.stdout);
+        let records = output.split("\n").collect::<Vec<&str>>();
+
+        let mut output: Vec<JoltOutput> = vec![];
+        for record in records.iter().skip(1) {
+            let fields: Vec<&str> = record.split_whitespace().collect();
+            if fields.len() < 11 {
+                continue;
+            }
+            let mut new_record = JoltOutput {
+                user: fields[0].to_string(),
+                pid: fields[1].to_string(),
+                cpu: fields[2].to_string(),
+                mem: fields[3].parse().unwrap_or(0),
+                vsz: fields[4].to_string(),
+                rss: fields[5].to_string(),
+                tty: fields[6].to_string(),
+                stat: fields[7].to_string(),
+                start: fields[8].to_string(),
+                time: fields[9].to_string(),
+                command: fields[10].to_string(),
+            };
+            new_record.command.truncate(15);
+            output.push(new_record);
         }
-        let mut new_record = JoltOutput {
-            user: fields[0].to_string(),
-            pid: fields[1].to_string(),
-            cpu: fields[2].to_string(),
-            mem: fields[3].parse().unwrap_or(0),
-            vsz: fields[4].to_string(),
-            rss: fields[5].to_string(),
-            tty: fields[6].to_string(),
-            stat: fields[7].to_string(),
-            start: fields[8].to_string(),
-            time: fields[9].to_string(),
-            command: fields[10].to_string(),
-        };
-        new_record.command.truncate(15);
-        table.add_row(Row::new(vec![
-            Cell::new(&new_record.user),
-            Cell::new(&new_record.pid),
-            Cell::new(&new_record.cpu),
-            Cell::new(&new_record.mem.to_string()),
-            Cell::new(&new_record.vsz),
-            Cell::new(&new_record.rss),
-            Cell::new(&new_record.tty),
-            Cell::new(&new_record.stat),
-            Cell::new(&new_record.start),
-            Cell::new(&new_record.time),
-            Cell::new(&new_record.command),
-        ]));
-        output.push(new_record);
-        // println!("{} \n ", new_record);
-    }
-    table.printstd();
-    // println!("{:?}", records)
-    return output;
-}
+        return output;
+    } else {
+        let output = OsCommand::new("WMIC")
+            .arg("path")
+            .arg("Win32_PerfFormattedData_PerfProc_Process")
+            .arg("get")
+            .arg("Name,IDProcess,PercentProcessorTime,WorkingSetPrivate")
+            .output()
+            .expect("failed to execute process");
+        let output = String::from_utf8_lossy(&output.stdout);
+        let records = output.split("\n").collect::<Vec<&str>>();
+        let mut processes = Vec::new();
 
-#[cfg(target_os = "windows")]
-fn scan_running_proccess() {
-    let output = OsCommand::new("WMIC")
-        .arg("path")
-        .arg("Win32_PerfFormattedData_PerfProc_Process")
-        .arg("get")
-        .arg("Name,IDProcess,PercentProcessorTime,WorkingSetPrivate")
-        .output()
-        .expect("failed to execute process");
-    let output = String::from_utf8_lossy(&output.stdout);
-    let records = output.split("\n").collect::<Vec<&str>>();
-    let mut processes = Vec::new();
-
-    for record in records.iter().skip(2) {
-        // Skip the first 2 lines of output as they don't contain task info
-        let fields: Vec<&str> = record.split_whitespace().collect();
-        if fields.len() < 4 {
-            continue;
+        for record in records.iter().skip(2) {
+            // Skip the first 2 lines of output as they don't contain task info
+            let fields: Vec<&str> = record.split_whitespace().collect();
+            if fields.len() < 4 {
+                continue;
+            }
+            let new_record = JoltOutput {
+                user: fields[0].to_string(),         // Image Name
+                pid: fields[1].to_string(),          // PID
+                cpu: fields[2].to_string(),          // CPU Usage
+                mem: fields[3].parse().unwrap_or(0), // Memory Usage
+                command: "".to_string(),
+                rss: "".to_string(),
+                start: "".to_string(),
+                stat: "".to_string(),
+                time: "".to_string(),
+                tty: "".to_string(),
+                vsz: "".to_string(),
+            };
+            processes.push(new_record);
         }
-        let new_record = JoltOutput {
-            user: fields[0].to_string(),         // Image Name
-            pid: fields[1].to_string(),          // PID
-            cpu: fields[2].to_string(),          // CPU Usage
-            mem: fields[3].parse().unwrap_or(0), // Memory Usage
-            command: "".to_string(),
-            rss: "".to_string(),
-            start: "".to_string(),
-            stat: "".to_string(),
-            time: "".to_string(),
-            tty: "".to_string(),
-            vsz: "".to_string(),
-        };
-        processes.push(new_record);
-    }
 
-    // Sort by CPU usage
-    processes.sort_by(|a, b| {
-        b.cpu
-            .parse::<f64>()
-            .unwrap_or(0.0)
-            .partial_cmp(&a.cpu.parse::<f64>().unwrap_or(0.0))
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    let mut table = Table::new();
-    table.add_row(row!["Image Name", "PID", "CPU Usage", "Memory Usage"]);
-
-    for process in processes {
-        let memory_mb = &process.mem / 1024 / 1024;
-        table.add_row(Row::new(vec![
-            Cell::new(&process.user),
-            Cell::new(&process.pid),
-            Cell::new(&process.cpu),
-            Cell::new(memory_mb.to_string().as_str()),
-        ]));
-    }
-
-    table.printstd();
+        // Sort by CPU usage
+        processes.sort_by(|a, b| {
+            b.cpu
+                .parse::<f64>()
+                .unwrap_or(0.0)
+                .partial_cmp(&a.cpu.parse::<f64>().unwrap_or(0.0))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        return processes;
+    };
 }
