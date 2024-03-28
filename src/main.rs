@@ -1,4 +1,4 @@
-use axum::{error_handling::HandleErrorLayer, response::Json, routing::get, Router,   http::StatusCode};
+use axum::{error_handling::HandleErrorLayer, response::Json, routing::get,routing::post ,Router,   http::StatusCode};
 use ratchet::component_service;
 use serde_json::{json, Value};
 use tower::{BoxError, ServiceBuilder};
@@ -18,7 +18,8 @@ async fn main() {
 
     let app = Router::new()
         .route("/", get(home))
-        .route("/diagnose", get(diagnose_handler)) // Add middleware to all routes
+        .route("/diagnose", get(diagnose_handler))
+        .route("/search", post(search)) // Add middleware to all routes
         .layer(
             ServiceBuilder::new()
                 .layer(HandleErrorLayer::new(|error: BoxError| async move {
@@ -49,5 +50,17 @@ async fn diagnose_handler() -> Json<Value> {
     let resp = component_service::scan_running_proccess();
     component_service::get_network_information();
     component_service::get_system_memory();
+    return Json(json!(resp));
+}
+
+// the input to our `create_user` handler
+#[derive(serde::Deserialize,Default)]
+struct GrepRequest {
+    pattern: Option<String>,
+    path:String
+}
+
+async fn search(Json(payload): Json<GrepRequest>,) -> Json<Value> {
+    let resp = ratchet::file_service::grep(&payload.path, &payload.pattern.unwrap_or_default()).unwrap();
     return Json(json!(resp));
 }

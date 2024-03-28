@@ -132,18 +132,6 @@ pub fn kill_process(pid: usize) {
 
 #[cfg(target_os = "linux")]
 pub fn scan_running_proccess() -> Vec<JoltOutput> {
-    // let output = if cfg!(target_os = "windows") {
-    //     Command::new("cmd")
-    //         .args(["/C", "echo hello"])
-    //         .output()
-    //         .expect("failed to execute process")
-    // } else {
-    //     Command::new("sh")
-    //         .arg("-c")
-    //         .arg("echo hello")
-    //         .output()
-    //         .expect("failed to execute process")
-    // };
 
     if cfg!(target_os = "linux") {
         let output = OsCommand::new("ps")

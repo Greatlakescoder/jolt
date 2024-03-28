@@ -125,7 +125,7 @@ pub fn read_sys_log(count: usize) {
 pub fn search(search_term: &str) {
     #[cfg(target_os = "linux")]
     {
-        file_service::grep("/var/log", search_term)
+        let _ = file_service::grep("/var/log", search_term);
     }
 
     #[cfg_attr(rustc_dummy, cfg(target_os = "windows"))]

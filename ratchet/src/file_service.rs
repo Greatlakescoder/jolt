@@ -1,6 +1,13 @@
-use std::{ffi::OsString, fs, io};
+use anyhow::{Error, Ok, Result};
+use rayon::prelude::*;
+use std::{
+    borrow::Borrow,
+    ffi::OsString,
+    fs::{self, DirEntry, ReadDir},
+    io,
+};
 
-pub fn get_files_in_directory(path: &str) -> io::Result<()> {
+pub fn get_files_in_directory(path: &str) -> Result<()> {
     // Get a list of all entries in the folder
     let entries = fs::read_dir(path).unwrap();
 
@@ -21,31 +28,20 @@ pub fn get_files_in_directory(path: &str) -> io::Result<()> {
     Ok(())
 }
 
-pub fn grep(path: &str, search_term: &str) {
-    let entries = fs::read_dir(path);
-    match entries {
-        Ok(dir_entries) => {
-            for file in dir_entries {
-                match file {
-                    Ok(f) => {
-                        if f.path().is_dir() {
-                            grep(f.path().to_str().unwrap(), search_term);
-                        } else {
-                            if f.file_name().to_str().unwrap().contains(search_term) {
-                                println!("File Name: {}", f.file_name().to_str().unwrap())
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        println!("Cannot read {} {}", path, err);
-                    }
-                }
-            }
+pub fn grep(path: &str, search_term: &str) -> Result<()> {
+    let dir = fs::read_dir(path)?;
+    let entries: Vec<DirEntry> = dir.filter_map(Result::ok).collect();
+
+    entries.par_iter().try_for_each(|file| {
+        if file.path().is_dir() {
+            grep(file.path().to_str().unwrap(), search_term)?;
+        } else if file.file_name().to_str().unwrap().contains(search_term) {
+            println!("File Name: {}", file.file_name().to_str().unwrap());
         }
-        Err(err) => {
-            println!("Cannot read {} {}", path, err);
-        }
-    }
+        Ok(())
+    })?;
+
+    return Ok(());
 }
 #[derive(PartialEq, Clone)]
 pub struct LargeFile {
@@ -127,30 +123,16 @@ impl FileCabinet {
     }
 }
 
-pub fn find_largest_files(path: &str, mut folder: Folder) -> Folder {
-    let entries = fs::read_dir(path);
-    match entries {
-        Ok(dir_entries) => {
-            for file in dir_entries {
-                match file {
-                    Ok(f) => {
-                        if f.path().is_dir() {
-                            folder = find_largest_files(f.path().to_str().unwrap(), folder);
-                        } else {
-                            let size_in_mb = f.metadata().unwrap().len() / 1024 / 1024;
-                            folder.add_file(LargeFile::new(f.path().into_os_string(), size_in_mb));
-                        }
-                    }
-                    Err(err) => {
-                        println!("Cannot read {} {}", path, err);
-                    }
-                }
-            }
-        }
-        Err(err) => {
-            println!("Cannot read {} {}", path, err);
+pub fn find_largest_files(path: &str, mut folder: Folder) -> Result<Folder> {
+    let entries = fs::read_dir(path)?;
+    for file in entries {
+        let f = file?;
+        if f.path().is_dir() {
+            folder = find_largest_files(f.path().to_str().unwrap(), folder)?;
+        } else {
+            let size_in_mb = f.metadata().unwrap().len() / 1024 / 1024;
+            folder.add_file(LargeFile::new(f.path().into_os_string(), size_in_mb));
         }
     }
-
-    return folder;
+    return Ok(folder);
 }
