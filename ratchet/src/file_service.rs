@@ -1,11 +1,9 @@
-use anyhow::{Error, Ok, Result};
+use anyhow::{Ok, Result};
 use rayon::prelude::*;
 use std::sync::Arc;
 use std::{
-    borrow::Borrow,
     ffi::OsString,
-    fs::{self, DirEntry, ReadDir},
-    io,
+    fs::{self, DirEntry},
     sync::Mutex,
 };
 

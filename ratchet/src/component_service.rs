@@ -1,8 +1,8 @@
 use core::fmt;
-use prettytable::{Cell, Row, Table};
+
 use serde::{Deserialize, Serialize};
 use std::process::Command as OsCommand;
-use sysinfo::{Components, Disks, Networks, System};
+use sysinfo::{Networks, System};
 
 use crate::table_builder::MagicTable;
 
