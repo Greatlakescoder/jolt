@@ -7,26 +7,6 @@ use std::{
     sync::Mutex,
 };
 
-pub fn get_files_in_directory(path: &str) -> Result<()> {
-    // Get a list of all entries in the folder
-    let entries = fs::read_dir(path).unwrap();
-
-    // Extract the filenames from the directory entries and store them in a vector
-    for file in entries {
-        let f = file?;
-        if f.path().is_dir() {
-            get_files_in_directory(f.path().to_str().unwrap())?;
-        } else {
-            let size_in_mb = f.metadata().unwrap().len() / 1024 / 1024;
-            println!(
-                "File Name: {}, Size in Mb {}",
-                f.file_name().to_str().unwrap(),
-                size_in_mb
-            )
-        }
-    }
-    Ok(())
-}
 
 pub struct GrepRequest<'a> {
     pub path: &'a str,

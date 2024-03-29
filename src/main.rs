@@ -24,6 +24,7 @@ async fn main() {
     let app = Router::new()
         .route("/", get(home))
         .route("/diagnose", get(diagnose_handler))
+        .route("/info/cpu", get(cpu_info_handler))
         .route("/search", post(search)) // Add middleware to all routes
         .layer(
             ServiceBuilder::new()
@@ -56,6 +57,11 @@ async fn diagnose_handler() -> Json<Value> {
     component_service::get_network_information();
     component_service::get_system_memory();
     return Json(json!(resp));
+}
+
+async fn cpu_info_handler() -> Json<Value> {
+    let resp = component_service::get_current_cpu_usage();
+    return Json(json!("Success"));
 }
 
 // the input to our `create_user` handler

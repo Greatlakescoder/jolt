@@ -130,9 +130,28 @@ pub fn kill_process(pid: usize) {
     }
 }
 
+pub fn get_current_cpu_usage() {
+    let mut s = System::new_with_specifics(
+        sysinfo::RefreshKind::new().with_cpu(sysinfo::CpuRefreshKind::everything()),
+    );
+
+    // Wait a bit because CPU usage is based on diff.
+    std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
+    // Refresh CPUs again.
+    s.refresh_cpu();
+
+    for cpu in s.cpus() {
+        println!(
+            "Brand: {} \n Frequency {} \n Usage {}%",
+            cpu.brand(),
+            cpu.frequency(),
+            cpu.cpu_usage()
+        );
+    }
+}
+
 #[cfg(target_os = "linux")]
 pub fn scan_running_proccess() -> Vec<JoltOutput> {
-
     if cfg!(target_os = "linux") {
         let output = OsCommand::new("ps")
             .arg("-eo")
