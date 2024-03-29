@@ -28,16 +28,42 @@ pub fn get_files_in_directory(path: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn grep(path: &str, search_term: &str, storage: Arc<Mutex<Vec<String>>>) -> Result<Arc<Mutex<Vec<String>>>> {
-    let dir = fs::read_dir(path)?;
+pub struct GrepRequest<'a> {
+    pub path: &'a str,
+    pub search_term: &'a str,
+    pub show_full_path: bool,
+}
+
+pub fn grep<'a>(
+    request: GrepRequest,
+    storage: Arc<Mutex<Vec<String>>>,
+) -> Result<Arc<Mutex<Vec<String>>>> {
+    let dir = fs::read_dir(request.path)?;
     let entries: Vec<DirEntry> = dir.filter_map(Result::ok).collect();
 
     entries.par_iter().try_for_each(|file| {
         if file.path().is_dir() {
-            grep(file.path().to_str().unwrap(), search_term, storage.clone())?;
-        } else if file.file_name().to_str().unwrap().contains(search_term) {
+            grep(
+                GrepRequest {
+                    path: file.path().to_str().unwrap(),
+                    search_term: request.search_term,
+                    show_full_path: request.show_full_path,
+                },
+                storage.clone(),
+            )?;
+        } else if file
+            .file_name()
+            .to_str()
+            .unwrap()
+            .contains(request.search_term)
+        {
             let mut storage = storage.lock().unwrap();
-            storage.push(file.file_name().into_string().unwrap());
+            if request.show_full_path {
+                storage.push(file.path().as_os_str().to_string_lossy().to_string());
+            } else {
+                storage.push(file.file_name().into_string().unwrap());
+            }
+           
         }
         Ok(())
     })?;

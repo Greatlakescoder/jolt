@@ -123,14 +123,14 @@ pub fn read_sys_log(count: usize) {
     println!("{}", output);
 }
 
-pub fn search(search_term: &str) {
-    #[cfg(target_os = "linux")]
-    {
-        let _ = file_service::grep("/var/log", search_term, Arc::new(Mutex::new(Vec::new())));
-    }
+// pub fn search(search_term: &str) {
+//     #[cfg(target_os = "linux")]
+//     {
+//         let _ = file_service::grep("/var/log", search_term, Arc::new(Mutex::new(Vec::new())));
+//     }
 
-    #[cfg_attr(rustc_dummy, cfg(target_os = "windows"))]
-    {
-        read_win_sys_log(search_term.to_string());
-    }
-}
+//     #[cfg_attr(rustc_dummy, cfg(target_os = "windows"))]
+//     {
+//         read_win_sys_log(search_term.to_string());
+//     }
+// }

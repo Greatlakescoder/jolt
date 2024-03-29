@@ -3,6 +3,7 @@ use axum::{
     routing::post, Router,
 };
 use ratchet::component_service;
+use ratchet::file_service::*;
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -59,17 +60,21 @@ async fn diagnose_handler() -> Json<Value> {
 
 // the input to our `create_user` handler
 #[derive(serde::Deserialize, Default)]
-struct GrepRequest {
+struct SearchRequest {
     pattern: Option<String>,
     path: String,
+    show_full_path: Option<bool>,
 }
 
-async fn search(Json(payload): Json<GrepRequest>) -> Json<Value> {
+async fn search(Json(payload): Json<SearchRequest>) -> Json<Value> {
     // TODO, this is not very effecient if we are searching a very large directory, lets
     // think about how we can improve it
-    let resp = ratchet::file_service::grep(
-        &payload.path,
-        &payload.pattern.unwrap_or_default(),
+    let resp = grep(
+        GrepRequest {
+            path: &payload.path,
+            search_term: &payload.pattern.unwrap_or_default(),
+            show_full_path: payload.show_full_path.unwrap_or_default(),
+        },
         Arc::new(Mutex::new(Vec::new())),
     )
     .unwrap();
