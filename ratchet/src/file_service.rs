@@ -1,10 +1,12 @@
 use anyhow::{Error, Ok, Result};
 use rayon::prelude::*;
+use std::sync::Arc;
 use std::{
     borrow::Borrow,
     ffi::OsString,
     fs::{self, DirEntry, ReadDir},
     io,
+    sync::Mutex,
 };
 
 pub fn get_files_in_directory(path: &str) -> Result<()> {
@@ -28,20 +30,21 @@ pub fn get_files_in_directory(path: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn grep(path: &str, search_term: &str) -> Result<()> {
+pub fn grep(path: &str, search_term: &str, storage: Arc<Mutex<Vec<String>>>) -> Result<Arc<Mutex<Vec<String>>>> {
     let dir = fs::read_dir(path)?;
     let entries: Vec<DirEntry> = dir.filter_map(Result::ok).collect();
 
     entries.par_iter().try_for_each(|file| {
         if file.path().is_dir() {
-            grep(file.path().to_str().unwrap(), search_term)?;
+            grep(file.path().to_str().unwrap(), search_term, storage.clone())?;
         } else if file.file_name().to_str().unwrap().contains(search_term) {
-            println!("File Name: {}", file.file_name().to_str().unwrap());
+            let mut storage = storage.lock().unwrap();
+            storage.push(file.file_name().into_string().unwrap());
         }
         Ok(())
     })?;
 
-    return Ok(());
+    return Ok(storage);
 }
 #[derive(PartialEq, Clone)]
 pub struct LargeFile {

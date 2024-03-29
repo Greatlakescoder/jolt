@@ -1,10 +1,14 @@
-use axum::{error_handling::HandleErrorLayer, response::Json, routing::get,routing::post ,Router,   http::StatusCode};
+use axum::{
+    error_handling::HandleErrorLayer, http::StatusCode, response::Json, routing::get,
+    routing::post, Router,
+};
 use ratchet::component_service;
 use serde_json::{json, Value};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tower::{BoxError, ServiceBuilder};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use std::time::Duration;
 #[tokio::main]
 async fn main() {
     // Setup a simple tracing setup
@@ -54,13 +58,20 @@ async fn diagnose_handler() -> Json<Value> {
 }
 
 // the input to our `create_user` handler
-#[derive(serde::Deserialize,Default)]
+#[derive(serde::Deserialize, Default)]
 struct GrepRequest {
     pattern: Option<String>,
-    path:String
+    path: String,
 }
 
-async fn search(Json(payload): Json<GrepRequest>,) -> Json<Value> {
-    let resp = ratchet::file_service::grep(&payload.path, &payload.pattern.unwrap_or_default()).unwrap();
-    return Json(json!(resp));
+async fn search(Json(payload): Json<GrepRequest>) -> Json<Value> {
+    let resp = ratchet::file_service::grep(
+        &payload.path,
+        &payload.pattern.unwrap_or_default(),
+        Arc::new(Mutex::new(Vec::new())),
+    )
+    .unwrap();
+    // We need to derefernece here because we want what the mutex guard is pointing to
+    let data_vault = resp.lock().unwrap();
+    return Json(json!(*data_vault));
 }

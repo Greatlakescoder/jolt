@@ -1,6 +1,7 @@
+use crate::file_service;
 use serde::Deserialize;
 use std::process::Command as OsCommand;
-use crate::file_service;
+use std::sync::{Arc,Mutex};
 
 #[derive(Debug, Deserialize)]
 struct EventRecord {
@@ -125,7 +126,7 @@ pub fn read_sys_log(count: usize) {
 pub fn search(search_term: &str) {
     #[cfg(target_os = "linux")]
     {
-        let _ = file_service::grep("/var/log", search_term);
+        let _ = file_service::grep("/var/log", search_term, Arc::new(Mutex::new(Vec::new())));
     }
 
     #[cfg_attr(rustc_dummy, cfg(target_os = "windows"))]
