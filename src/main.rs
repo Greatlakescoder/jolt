@@ -65,6 +65,8 @@ struct GrepRequest {
 }
 
 async fn search(Json(payload): Json<GrepRequest>) -> Json<Value> {
+    // TODO, this is not very effecient if we are searching a very large directory, lets
+    // think about how we can improve it
     let resp = ratchet::file_service::grep(
         &payload.path,
         &payload.pattern.unwrap_or_default(),
