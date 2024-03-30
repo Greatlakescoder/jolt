@@ -153,7 +153,6 @@ pub fn get_current_cpu_usage() -> CpuUsageResponse {
     s.refresh_cpu();
 
     let mut resp: Vec<CpuUsage> = vec![];
-
     for cpu in s.cpus() {
         resp.push(CpuUsage {
             name: cpu.name().to_string(),

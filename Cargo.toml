@@ -24,3 +24,4 @@ tower-http = { version = "0.5.2", features = ["add-extension", "trace"] }
 tracing = "0.1.40"
 anyhow = "1.0.81"
 rayon = "1.10.0"
+tempfile = "3.10.1"

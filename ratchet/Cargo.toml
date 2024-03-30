@@ -15,3 +15,5 @@ sysinfo = "0.30.5"
 xml-rs = "0.8.19"
 anyhow = "1.0.81"
 rayon = "1.10.0"
+tempfile = "3.10.1"
+tokio = { version = "1.36.0", features = ["full"] }

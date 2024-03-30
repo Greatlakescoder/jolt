@@ -3,11 +3,12 @@ use axum::{
     routing::post, Router,
 };
 use ratchet::component_service;
-use ratchet::component_service::get_memory_cpu_usage;
+
 use ratchet::file_service::*;
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tokio::task;
 use tower::{BoxError, ServiceBuilder};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -28,7 +29,7 @@ async fn main() {
         .route("/info/cpu", get(cpu_info_handler))
         .route("/info/memory", get(ram_info_handler))
         .route("/search", post(search)) // Add middleware to all routes
-        .route("/file/largest",post(get_largest_file))
+        .route("/file/largest", post(get_largest_file))
         .layer(
             ServiceBuilder::new()
                 .layer(HandleErrorLayer::new(|error: BoxError| async move {
@@ -63,7 +64,9 @@ async fn diagnose_handler() -> Json<Value> {
 }
 
 async fn cpu_info_handler() -> Json<Value> {
-    let resp = component_service::get_current_cpu_usage();
+    let resp = task::spawn_blocking(move || component_service::get_current_cpu_usage())
+        .await
+        .unwrap();
     return Json(json!(resp));
 }
 
@@ -71,7 +74,6 @@ async fn ram_info_handler() -> Json<Value> {
     let resp = component_service::get_memory_cpu_usage();
     return Json(json!(resp));
 }
-
 
 // the input to our `create_user` handler
 #[derive(serde::Deserialize, Default)]
@@ -98,16 +100,16 @@ async fn search(Json(payload): Json<SearchRequest>) -> Json<Value> {
     return Json(json!(*data_vault));
 }
 
-
 async fn get_largest_file(Json(payload): Json<SearchRequest>) -> Json<Value> {
     // TODO, this is not very effecient if we are searching a very large directory, lets
     // think about how we can improve it
-    let resp = find_largest_files(
-        &payload.path,
-        Arc::new(Mutex::new(Vec::new())),
-    )
+    let resp = task::spawn_blocking(move || {
+        find_largest_files(&payload.path, Arc::new(Mutex::new(Vec::new())))
+    })
+    .await
+    .unwrap()
     .unwrap();
-    // We need to derefernece here because we want what the mutex guard is pointing to
+
     let data_vault = resp.lock().unwrap();
     return Json(json!(*data_vault));
 }
