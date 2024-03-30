@@ -64,9 +64,13 @@ async fn diagnose_handler() -> Json<Value> {
 }
 
 async fn cpu_info_handler() -> Json<Value> {
-    let resp = task::spawn_blocking(move || component_service::get_current_cpu_usage())
-        .await
-        .unwrap();
+    let resp = match task::spawn_blocking(move || component_service::get_current_cpu_usage()).await {
+        Ok(result) => result,
+        Err(e) => {
+            return Json(json!({ "error": format!("Error in spawn_blocking: {:?}", e) }));
+        },
+    };
+
     return Json(json!(resp));
 }
 
@@ -101,15 +105,22 @@ async fn search(Json(payload): Json<SearchRequest>) -> Json<Value> {
 }
 
 async fn get_largest_file(Json(payload): Json<SearchRequest>) -> Json<Value> {
-    // TODO, this is not very effecient if we are searching a very large directory, lets
-    // think about how we can improve it
-    let resp = task::spawn_blocking(move || {
+    let resp = match task::spawn_blocking(move || {
         find_largest_files(&payload.path, Arc::new(Mutex::new(Vec::new())))
-    })
-    .await
-    .unwrap()
-    .unwrap();
-
-    let data_vault = resp.lock().unwrap();
+    }).await {
+        Ok(Ok(resp)) => resp,
+        Ok(Err(e)) => {
+            return Json(json!({ "error": format!("Error in find_largest_files: {:?}", e) }));
+        },
+        Err(e) => {
+            return Json(json!({ "error": format!("Error in spawn_blocking: {:?}", e) }));
+        },
+    };
+    let data_vault = match resp.lock() {
+        Ok(data) => data,
+        Err(e) => {
+            return Json(json!({ "error": format!("Error locking mutex: {:?}", e) }));
+        },
+    };
     return Json(json!(*data_vault));
 }

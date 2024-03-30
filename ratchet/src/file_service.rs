@@ -50,7 +50,7 @@ pub fn grep<'a>(
     return Ok(storage);
 }
 
-#[derive(Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq,Debug)]
 pub struct LargeFile {
     pub filename: String,
     pub file_size: u64,
