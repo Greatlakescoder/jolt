@@ -3,6 +3,7 @@ use axum::{
     routing::post, Router,
 };
 use ratchet::component_service;
+use ratchet::component_service::get_memory_cpu_usage;
 use ratchet::file_service::*;
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
@@ -25,6 +26,7 @@ async fn main() {
         .route("/", get(home))
         .route("/diagnose", get(diagnose_handler))
         .route("/info/cpu", get(cpu_info_handler))
+        .route("/info/memory", get(ram_info_handler))
         .route("/search", post(search)) // Add middleware to all routes
         .layer(
             ServiceBuilder::new()
@@ -61,8 +63,14 @@ async fn diagnose_handler() -> Json<Value> {
 
 async fn cpu_info_handler() -> Json<Value> {
     let resp = component_service::get_current_cpu_usage();
-    return Json(json!("Success"));
+    return Json(json!(resp));
 }
+
+async fn ram_info_handler() -> Json<Value> {
+    let resp = component_service::get_memory_cpu_usage();
+    return Json(json!(resp));
+}
+
 
 // the input to our `create_user` handler
 #[derive(serde::Deserialize, Default)]

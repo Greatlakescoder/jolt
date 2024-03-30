@@ -130,7 +130,19 @@ pub fn kill_process(pid: usize) {
     }
 }
 
-pub fn get_current_cpu_usage() {
+#[derive(Serialize,Deserialize)]
+pub struct CpuUsageResponse {
+    pub cpus: Vec<CpuUsage>,
+}
+#[derive(Serialize,Deserialize)]
+pub struct CpuUsage {
+    pub name: String,
+    pub brand: String,
+    pub frequency: u64,
+    pub usage: f32,
+}
+
+pub fn get_current_cpu_usage() -> CpuUsageResponse {
     let mut s = System::new_with_specifics(
         sysinfo::RefreshKind::new().with_cpu(sysinfo::CpuRefreshKind::everything()),
     );
@@ -140,14 +152,39 @@ pub fn get_current_cpu_usage() {
     // Refresh CPUs again.
     s.refresh_cpu();
 
+    let mut resp: Vec<CpuUsage> = vec![];
+
     for cpu in s.cpus() {
-        println!(
-            "Brand: {} \n Frequency {} \n Usage {}%",
-            cpu.brand(),
-            cpu.frequency(),
-            cpu.cpu_usage()
-        );
+        resp.push(CpuUsage {
+            name: cpu.name().to_string(),
+            brand: cpu.brand().to_string(),
+            frequency: cpu.frequency(),
+            usage: cpu.cpu_usage(),
+        })
     }
+    return CpuUsageResponse { cpus: resp }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct MemoryResponse {
+    pub free_memory: u64,
+    pub total_memory: u64,
+}
+
+pub fn get_memory_cpu_usage() -> MemoryResponse {
+    let mut s = System::new_with_specifics(
+        sysinfo::RefreshKind::new().with_memory(sysinfo::MemoryRefreshKind::everything()),
+    );
+
+    // Wait a bit because CPU usage is based on diff.
+    std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
+    // Refresh Memory
+    s.refresh_memory();
+
+    return MemoryResponse {
+        free_memory: s.free_memory(),
+        total_memory: s.total_memory(),
+    };
 }
 
 #[cfg(target_os = "linux")]
