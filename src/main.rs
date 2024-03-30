@@ -42,7 +42,7 @@ async fn main() {
                         ))
                     }
                 }))
-                .timeout(Duration::from_secs(10))
+                .timeout(Duration::from_secs(6000))
                 .layer(TraceLayer::new_for_http())
                 .into_inner(),
         );
