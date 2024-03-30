@@ -28,6 +28,7 @@ async fn main() {
         .route("/info/cpu", get(cpu_info_handler))
         .route("/info/memory", get(ram_info_handler))
         .route("/search", post(search)) // Add middleware to all routes
+        .route("/file/largest",post(get_largest_file))
         .layer(
             ServiceBuilder::new()
                 .layer(HandleErrorLayer::new(|error: BoxError| async move {
@@ -89,6 +90,20 @@ async fn search(Json(payload): Json<SearchRequest>) -> Json<Value> {
             search_term: &payload.pattern.unwrap_or_default(),
             show_full_path: payload.show_full_path.unwrap_or_default(),
         },
+        Arc::new(Mutex::new(Vec::new())),
+    )
+    .unwrap();
+    // We need to derefernece here because we want what the mutex guard is pointing to
+    let data_vault = resp.lock().unwrap();
+    return Json(json!(*data_vault));
+}
+
+
+async fn get_largest_file(Json(payload): Json<SearchRequest>) -> Json<Value> {
+    // TODO, this is not very effecient if we are searching a very large directory, lets
+    // think about how we can improve it
+    let resp = find_largest_files(
+        &payload.path,
         Arc::new(Mutex::new(Vec::new())),
     )
     .unwrap();
