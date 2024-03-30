@@ -1,10 +1,9 @@
 use anyhow::{Ok, Result};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::clone;
+
 use std::sync::Arc;
 use std::{
-    ffi::OsString,
     fs::{self, DirEntry},
     sync::Mutex,
 };
