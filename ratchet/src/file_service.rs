@@ -57,28 +57,29 @@ pub struct LargeFile {
     pub file_size: u64,
 }
 
-pub fn find_largest_files(path: &str, storage: Arc<Mutex<Vec<LargeFile>>>) -> Result<Arc<Mutex<Vec<LargeFile>>>> {
+pub fn find_largest_files(
+    path: &str,
+    storage: Arc<Mutex<Vec<LargeFile>>>,
+) -> Result<Arc<Mutex<Vec<LargeFile>>>> {
     let dir = fs::read_dir(path)?;
     let entries: Vec<DirEntry> = dir.filter_map(Result::ok).collect();
 
     entries.par_iter().try_for_each(|file| {
         if file.path().is_dir() {
-            find_largest_files(path, storage.clone())?;
-        }
-
-        let size_in_mb = file.metadata().unwrap().len() / 1024 / 1024;
-        let large_file = LargeFile {
-            filename: file.file_name().into_string().unwrap(),
-            file_size: size_in_mb,
-        };
-
-        let tmp_storage = storage.lock().unwrap();
-        if tmp_storage.len() == 10 {
-            drop(tmp_storage);
-            replace_smallest_file(large_file, storage.clone());
+            find_largest_files(file.path().to_str().unwrap(), storage.clone())?;
         } else {
-            let mut storage = storage.lock().unwrap();
-            storage.push(large_file)
+            let size_in_mb = file.metadata().unwrap().len() / 1024 / 1024;
+            let large_file = LargeFile {
+                filename: file.file_name().into_string().unwrap(),
+                file_size: size_in_mb,
+            };
+
+            let mut tmp_storage = storage.lock().unwrap();
+            if tmp_storage.len() == 10 {
+                replace_smallest_file(large_file, &mut tmp_storage);
+            } else {
+                tmp_storage.push(large_file)
+            }
         }
 
         Ok(())
@@ -87,8 +88,7 @@ pub fn find_largest_files(path: &str, storage: Arc<Mutex<Vec<LargeFile>>>) -> Re
     return Ok(storage);
 }
 
-fn replace_smallest_file(file: LargeFile, storage: Arc<Mutex<Vec<LargeFile>>>) {
-    let mut vault = storage.lock().unwrap();
+fn replace_smallest_file(file: LargeFile, vault: &mut Vec<LargeFile>) {
     let mut smallest_file = vault[0].clone();
     for f in vault.clone().into_iter() {
         if f.file_size < smallest_file.file_size {
