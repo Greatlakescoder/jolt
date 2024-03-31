@@ -6,7 +6,7 @@ use ratchet::component_service;
 
 use ratchet::file_service::*;
 use serde_json::{json, Value};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc::*};
 use std::time::Duration;
 use tokio::task;
 use tower::{BoxError, ServiceBuilder};
@@ -105,8 +105,13 @@ async fn search(Json(payload): Json<SearchRequest>) -> Json<Value> {
 }
 
 async fn get_largest_file(Json(payload): Json<SearchRequest>) -> Json<Value> {
+    // let (tx, rx) = std::sync::mpsc::channel();
     let resp = match task::spawn_blocking(move || {
-        find_largest_files(&payload.path, Arc::new(Mutex::new(Vec::new())))
+        let r = find_largest_files(&payload.path, Arc::new(Mutex::new(Vec::new())));
+        // for received in rx {
+        //     println!("Update: {}", received);
+        // }
+        return r;
     }).await {
         Ok(Ok(resp)) => resp,
         Ok(Err(e)) => {

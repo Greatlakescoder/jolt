@@ -143,14 +143,18 @@ pub struct CpuUsage {
 }
 
 pub fn get_current_cpu_usage() -> CpuUsageResponse {
+    println!("Get Current CPU Start");
     let mut s = System::new_with_specifics(
         sysinfo::RefreshKind::new().with_cpu(sysinfo::CpuRefreshKind::everything()),
     );
 
     // Wait a bit because CPU usage is based on diff.
+    println!("Get Current CPU Sleep");
     std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
     // Refresh CPUs again.
+    println!("Get Current CPU Refresh");
     s.refresh_cpu();
+    println!("Get Current CPU Logic");
 
     let mut resp: Vec<CpuUsage> = vec![];
     for cpu in s.cpus() {
