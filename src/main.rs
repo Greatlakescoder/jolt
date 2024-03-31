@@ -1,3 +1,4 @@
+use axum::response::IntoResponse;
 use axum::{
     error_handling::HandleErrorLayer, extract::Extension, http::StatusCode, response::Json,
     routing::get, routing::post, Router,
@@ -5,6 +6,8 @@ use axum::{
 use ratchet::component_service;
 
 use ratchet::file_service::*;
+use serde::Deserialize;
+use serde::Serialize;
 use serde_json::{json, Value};
 use std::sync::{
     mpsc::{channel, Sender},
@@ -17,8 +20,9 @@ use tower_http::trace::TraceLayer;
 use tower_http::add_extension::AddExtensionLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+#[derive(Debug)]
 struct AppState {
-    channel_sender: Arc<Mutex<Sender<String>>>,
+    channel_sender: tokio::sync::Mutex<Sender<String>>,
 }
 
 #[tokio::main]
@@ -34,7 +38,7 @@ async fn main() {
 
     let (tx, rx) = channel();
     let app_state = Arc::new(AppState {
-        channel_sender: Arc::new(Mutex::new(tx)),
+        channel_sender: tokio::sync::Mutex::new(tx),
     });
 
     let app = Router::new()
@@ -44,7 +48,6 @@ async fn main() {
         .route("/info/memory", get(ram_info_handler))
         .route("/search", post(search)) // Add middleware to all routes
         .route("/file/largest", post(get_largest_file))
-        .layer(AddExtensionLayer::new(app_state))
         .layer(
             ServiceBuilder::new()
                 .layer(HandleErrorLayer::new(|error: BoxError| async move {
@@ -60,7 +63,7 @@ async fn main() {
                 .timeout(Duration::from_secs(6000))
                 .layer(TraceLayer::new_for_http())
                 .into_inner(),
-        );
+        ).layer(AddExtensionLayer::new(app_state));
 
     // Spawn a new task to read from the channel
     let read_task = tokio::spawn(async move {
@@ -85,14 +88,13 @@ async fn diagnose_handler() -> Json<Value> {
     return Json(json!(resp));
 }
 
-async fn cpu_info_handler(Extension(app_state): Extension<Arc<AppState>>) -> Json<Value> {
-    let channel_sender = match app_state.channel_sender.lock() {
-        Ok(sender) => sender,
-        Err(err) => {
-            return Json(json!({"error": format!("Failed to acquire lock: {:?}", err)}));
-        }
-    };
-
+async fn cpu_info_handler(app_state: Extension<Arc<AppState>>) -> Json<Value> {
+    
+    let app_state = app_state.0;
+    // LESSON LEARNED - If you use regular mutex it blocks causes compile errors, had to use tokio mutex
+    let channel_sender = app_state.channel_sender.lock().await;
+    let _ = channel_sender.send("Hi".to_string());
+    // channel_sender.send("Hi Wes".to_string());
     // channel_sender.send("Hello from home handler".to_string()).unwrap();
     let resp = match task::spawn_blocking(move || component_service::get_current_cpu_usage()).await
     {
