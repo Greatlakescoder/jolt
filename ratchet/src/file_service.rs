@@ -58,7 +58,7 @@ pub struct LargeFile {
 pub fn find_largest_files(
     path: &str,
     storage: Arc<Mutex<Vec<LargeFile>>>,
-    tx: Arc<tokio::sync::Mutex<std::sync::mpsc::Sender<u64>>>,
+    tx: Arc<std::sync::mpsc::Sender<u64>>,
 ) -> Result<Arc<Mutex<Vec<LargeFile>>>> {
     let dir = fs::read_dir(path)?;
     dir.filter_map(Result::ok).try_for_each(|file| {
@@ -79,7 +79,7 @@ pub fn find_largest_files(
                     } else {
                         tmp_storage.push(large_file)
                     }
-                    // tx.send("Processed a file").unwrap();
+                    tx.send(1).unwrap();
                 }
                 Err(err) => {
                     // Handle the error here, or simply skip the file

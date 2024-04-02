@@ -1,7 +1,8 @@
-use axum::response::IntoResponse;
+
 use axum::{
     error_handling::HandleErrorLayer, extract::Extension, http::StatusCode, response::Json,
     routing::get, routing::post, Router,
+    response::{IntoResponse,ErrorResponse}
 };
 use ratchet::component_service;
 
@@ -22,7 +23,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Debug)]
 struct AppState {
-    channel_sender: Arc<tokio::sync::Mutex<Sender<u64>>>,
+    channel_sender: Arc<Sender<u64>>,
 }
 
 #[tokio::main]
@@ -38,8 +39,7 @@ async fn main() {
 
     let (tx, rx) = channel();
     let app_state = Arc::new(AppState {
-        channel_sender: Arc::new(tokio::sync::Mutex::new(tx)),
-    
+        channel_sender: Arc::new(tx),
     });
 
     let app = Router::new()
@@ -68,10 +68,13 @@ async fn main() {
         .layer(AddExtensionLayer::new(app_state));
 
     // Spawn a new task to read from the channel
+    let mut file_total = 0;
     let read_task = tokio::spawn(async move {
         while let Ok(message) = rx.recv() {
-            println!("Received: {}", message);
+            file_total += message;
+            println!("Total files: {}", file_total);
         }
+        
     });
 
     // run our app with hyper, listening globally on port 3000
@@ -114,7 +117,7 @@ async fn ram_info_handler() -> Json<Value> {
 }
 
 // the input to our `create_user` handler
-#[derive(serde::Deserialize, Default)]
+#[derive(serde::Deserialize, Default, Clone, Serialize)]
 struct SearchRequest {
     pattern: Option<String>,
     path: String,
@@ -138,16 +141,18 @@ async fn search(Json(payload): Json<SearchRequest>) -> Json<Value> {
     return Json(json!(*data_vault));
 }
 
+// LESSON LEARNED https://docs.rs/axum/latest/axum/extract/index.html#the-order-of-extractors
 async fn get_largest_file(
+    Extension(app_state): Extension<Arc<AppState>>,
     Json(payload): Json<SearchRequest>,
-    app_state: Extension<Arc<AppState>>,
-) -> Json<Value> {
-    let app_state = app_state.0;
+) -> impl IntoResponse {
     // LESSON LEARNED - If you use regular mutex it blocks causes compile errors, had to use tokio mutex
     let resp = match task::spawn_blocking(move || {
-        let r = find_largest_files(&payload.path
-            , Arc::new(Mutex::new(Vec::new()))
-            , app_state.channel_sender.clone());
+        let r = find_largest_files(
+            &payload.path,
+            Arc::new(Mutex::new(Vec::new())),
+            app_state.channel_sender.clone(),
+        );
         return r;
     })
     .await
@@ -167,4 +172,5 @@ async fn get_largest_file(
         }
     };
     return Json(json!(*data_vault));
+    // return Ok("")
 }
