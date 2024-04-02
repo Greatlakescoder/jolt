@@ -1,8 +1,12 @@
-
 use axum::{
-    error_handling::HandleErrorLayer, extract::Extension, http::StatusCode, response::Json,
-    routing::get, routing::post, Router,
-    response::{IntoResponse,ErrorResponse}
+    error_handling::HandleErrorLayer,
+    extract::Extension,
+    http::StatusCode,
+    response::Json,
+    response::{ErrorResponse, IntoResponse},
+    routing::get,
+    routing::post,
+    Router,
 };
 use ratchet::component_service;
 
@@ -24,6 +28,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 #[derive(Debug)]
 struct AppState {
     channel_sender: Arc<Sender<u64>>,
+    total: Mutex<u64>,
 }
 
 #[tokio::main]
@@ -40,6 +45,7 @@ async fn main() {
     let (tx, rx) = channel();
     let app_state = Arc::new(AppState {
         channel_sender: Arc::new(tx),
+        total: Mutex::new(0),
     });
 
     let app = Router::new()
@@ -65,16 +71,14 @@ async fn main() {
                 .layer(TraceLayer::new_for_http())
                 .into_inner(),
         )
-        .layer(AddExtensionLayer::new(app_state));
+        .layer(AddExtensionLayer::new(app_state.clone()));
 
     // Spawn a new task to read from the channel
-    let mut file_total = 0;
-    let read_task = tokio::spawn(async move {
+    tokio::spawn(async move {
         while let Ok(message) = rx.recv() {
-            file_total += message;
-            println!("Total files: {}", file_total);
+            let mut total = app_state.total.lock().unwrap();
+            *total += message;
         }
-        
     });
 
     // run our app with hyper, listening globally on port 3000
@@ -147,11 +151,12 @@ async fn get_largest_file(
     Json(payload): Json<SearchRequest>,
 ) -> impl IntoResponse {
     // LESSON LEARNED - If you use regular mutex it blocks causes compile errors, had to use tokio mutex
+    let db = app_state.clone();
     let resp = match task::spawn_blocking(move || {
         let r = find_largest_files(
             &payload.path,
             Arc::new(Mutex::new(Vec::new())),
-            app_state.channel_sender.clone(),
+            db.channel_sender.clone(),
         );
         return r;
     })
@@ -171,6 +176,7 @@ async fn get_largest_file(
             return Json(json!({ "error": format!("Error locking mutex: {:?}", e) }));
         }
     };
-    return Json(json!(*data_vault));
+    let file_total = app_state.total.lock().unwrap();
+    return Json(json!({"files": *data_vault, "total_files_searched": *file_total}));
     // return Ok("")
 }
