@@ -1,7 +1,8 @@
-use axum::response::IntoResponse;
+
 use axum::{
     error_handling::HandleErrorLayer, extract::Extension, http::StatusCode, response::Json,
     routing::get, routing::post, Router,
+    response::{IntoResponse,ErrorResponse}
 };
 use ratchet::component_service;
 
@@ -16,13 +17,13 @@ use std::sync::{
 use std::time::Duration;
 use tokio::task;
 use tower::{BoxError, ServiceBuilder};
-use tower_http::trace::TraceLayer;
 use tower_http::add_extension::AddExtensionLayer;
+use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Debug)]
 struct AppState {
-    channel_sender: tokio::sync::Mutex<Sender<String>>,
+    channel_sender: Arc<Sender<u64>>,
 }
 
 #[tokio::main]
@@ -38,7 +39,7 @@ async fn main() {
 
     let (tx, rx) = channel();
     let app_state = Arc::new(AppState {
-        channel_sender: tokio::sync::Mutex::new(tx),
+        channel_sender: Arc::new(tx),
     });
 
     let app = Router::new()
@@ -63,13 +64,17 @@ async fn main() {
                 .timeout(Duration::from_secs(6000))
                 .layer(TraceLayer::new_for_http())
                 .into_inner(),
-        ).layer(AddExtensionLayer::new(app_state));
+        )
+        .layer(AddExtensionLayer::new(app_state));
 
     // Spawn a new task to read from the channel
+    let mut file_total = 0;
     let read_task = tokio::spawn(async move {
         while let Ok(message) = rx.recv() {
-            println!("Received: {}", message);
+            file_total += message;
+            println!("Total files: {}", file_total);
         }
+        
     });
 
     // run our app with hyper, listening globally on port 3000
@@ -88,12 +93,11 @@ async fn diagnose_handler() -> Json<Value> {
     return Json(json!(resp));
 }
 
-async fn cpu_info_handler(app_state: Extension<Arc<AppState>>) -> Json<Value> {
-    
-    let app_state = app_state.0;
+async fn cpu_info_handler() -> Json<Value> {
+    // let app_state = app_state.0;
     // LESSON LEARNED - If you use regular mutex it blocks causes compile errors, had to use tokio mutex
-    let channel_sender = app_state.channel_sender.lock().await;
-    let _ = channel_sender.send("Hi".to_string());
+    // let channel_sender = app_state.channel_sender.lock().await;
+    // let _ = channel_sender.send("Hi".to_string());
     // channel_sender.send("Hi Wes".to_string());
     // channel_sender.send("Hello from home handler".to_string()).unwrap();
     let resp = match task::spawn_blocking(move || component_service::get_current_cpu_usage()).await
@@ -113,7 +117,7 @@ async fn ram_info_handler() -> Json<Value> {
 }
 
 // the input to our `create_user` handler
-#[derive(serde::Deserialize, Default)]
+#[derive(serde::Deserialize, Default, Clone, Serialize)]
 struct SearchRequest {
     pattern: Option<String>,
     path: String,
@@ -137,13 +141,18 @@ async fn search(Json(payload): Json<SearchRequest>) -> Json<Value> {
     return Json(json!(*data_vault));
 }
 
-async fn get_largest_file(Json(payload): Json<SearchRequest>) -> Json<Value> {
-    // let (tx, rx) = std::sync::mpsc::channel();
+// LESSON LEARNED https://docs.rs/axum/latest/axum/extract/index.html#the-order-of-extractors
+async fn get_largest_file(
+    Extension(app_state): Extension<Arc<AppState>>,
+    Json(payload): Json<SearchRequest>,
+) -> impl IntoResponse {
+    // LESSON LEARNED - If you use regular mutex it blocks causes compile errors, had to use tokio mutex
     let resp = match task::spawn_blocking(move || {
-        let r = find_largest_files(&payload.path, Arc::new(Mutex::new(Vec::new())));
-        // for received in rx {
-        //     println!("Update: {}", received);
-        // }
+        let r = find_largest_files(
+            &payload.path,
+            Arc::new(Mutex::new(Vec::new())),
+            app_state.channel_sender.clone(),
+        );
         return r;
     })
     .await
@@ -163,4 +172,5 @@ async fn get_largest_file(Json(payload): Json<SearchRequest>) -> Json<Value> {
         }
     };
     return Json(json!(*data_vault));
+    // return Ok("")
 }
