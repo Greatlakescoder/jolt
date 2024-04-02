@@ -49,7 +49,7 @@ pub fn grep<'a>(
     return Ok(storage);
 }
 
-#[derive(Clone, Serialize, Deserialize, PartialEq,Debug)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub struct LargeFile {
     pub filename: String,
     pub file_size: u64,
@@ -58,12 +58,12 @@ pub struct LargeFile {
 pub fn find_largest_files(
     path: &str,
     storage: Arc<Mutex<Vec<LargeFile>>>,
-    // tx: std::sync::mpsc::Sender<&'static str>
+    tx: Arc<tokio::sync::Mutex<std::sync::mpsc::Sender<u64>>>,
 ) -> Result<Arc<Mutex<Vec<LargeFile>>>> {
     let dir = fs::read_dir(path)?;
     dir.filter_map(Result::ok).try_for_each(|file| {
         if file.path().is_dir() {
-            find_largest_files(file.path().to_str().unwrap(), storage.clone())?;
+            find_largest_files(file.path().to_str().unwrap(), storage.clone(), tx.clone())?;
         } else {
             match file.metadata() {
                 std::result::Result::Ok(metadata) => {
@@ -172,7 +172,6 @@ mod tests {
     //     storage.sort_by(|a, b| b.file_size.cmp(&a.file_size));
     //     assert_eq!(storage.len(), 4);
     // }
-
     #[test]
     fn test_grep() {
         let temp_dir = tempdir().unwrap();
