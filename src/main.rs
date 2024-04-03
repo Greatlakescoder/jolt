@@ -24,7 +24,8 @@ use tower::{BoxError, ServiceBuilder};
 use tower_http::add_extension::AddExtensionLayer;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
+use tokio::sync::oneshot;
+use futures::FutureExt; // for `.fuse()`
 #[derive(Debug)]
 struct AppState {
     channel_sender: Arc<Sender<u64>>,
@@ -150,6 +151,24 @@ async fn get_largest_file(
     Extension(app_state): Extension<Arc<AppState>>,
     Json(payload): Json<SearchRequest>,
 ) -> impl IntoResponse {
+    let (stop_sender, stop_receiver) = oneshot::channel();
+    let mut stop_receiver = stop_receiver.fuse();
+    let tracker = app_state.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                _ = tokio::time::sleep(tokio::time::Duration::from_secs(2)) => {
+                    let processed_files = tracker.total.lock().unwrap();
+                    println!("Number of proccessed files so far {}", processed_files);
+                }
+                _ = &mut stop_receiver => {
+                    let mut processed_files = tracker.total.lock().unwrap();
+                    *processed_files = 0;
+                    break;
+                }
+            }
+        }
+    });
     // LESSON LEARNED - If you use regular mutex it blocks causes compile errors, had to use tokio mutex
     let db = app_state.clone();
     let resp = match task::spawn_blocking(move || {
@@ -177,6 +196,7 @@ async fn get_largest_file(
         }
     };
     let file_total = app_state.total.lock().unwrap();
+    let _ = stop_sender.send(());
     return Json(json!({"files": *data_vault, "total_files_searched": *file_total}));
     // return Ok("")
 }
