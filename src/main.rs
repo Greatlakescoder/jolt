@@ -51,7 +51,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/", get(home))
-        .route("/diagnose", get(diagnose_handler))
+        .route("/info/tasks", get(diagnose_handler))
         .route("/info/cpu", get(cpu_info_handler))
         .route("/info/memory", get(ram_info_handler))
         .route("/search", post(search)) // Add middleware to all routes
@@ -99,12 +99,6 @@ async fn diagnose_handler() -> Json<Value> {
 }
 
 async fn cpu_info_handler() -> Json<Value> {
-    // let app_state = app_state.0;
-    // LESSON LEARNED - If you use regular mutex it blocks causes compile errors, had to use tokio mutex
-    // let channel_sender = app_state.channel_sender.lock().await;
-    // let _ = channel_sender.send("Hi".to_string());
-    // channel_sender.send("Hi Wes".to_string());
-    // channel_sender.send("Hello from home handler".to_string()).unwrap();
     let resp = match task::spawn_blocking(move || component_service::get_current_cpu_usage()).await
     {
         Ok(result) => result,
