@@ -1,11 +1,11 @@
 use core::fmt;
 
 use serde::{Deserialize, Serialize};
-use std::{borrow::Borrow, process::Command as OsCommand};
+use std::{process::Command as OsCommand};
 use sysinfo::{Networks, System};
-use anyhow::Result;
+
 use crate::table_builder::MagicTable;
-use psutil::process::{os::{linux::Oneshot, unix::ProcessExt}, processes, Process};
+use psutil::process::{processes};
 
 #[derive(Serialize, Deserialize)]
 pub struct JoltOutput {
@@ -143,7 +143,7 @@ pub fn get_current_cpu_usage() -> CpuUsageResponse {
             usage: cpu.cpu_usage(),
         })
     }
-    return CpuUsageResponse { cpus: resp }
+    CpuUsageResponse { cpus: resp }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -162,10 +162,10 @@ pub fn get_memory_cpu_usage() -> MemoryResponse {
     // Refresh Memory
     s.refresh_memory();
 
-    return MemoryResponse {
+    MemoryResponse {
         free_memory: s.free_memory(),
         total_memory: s.total_memory(),
-    };
+    }
 }
 
 pub fn scan_running_proccess() ->anyhow::Result<Vec<JoltOutput>> {

@@ -46,7 +46,7 @@ pub fn grep<'a>(
         Ok(())
     })?;
 
-    return Ok(storage);
+    Ok(storage)
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
@@ -91,7 +91,7 @@ pub fn find_largest_files(
         Ok(())
     })?;
 
-    return Ok(storage);
+    Ok(storage)
 }
 
 fn replace_smallest_file(file: LargeFile, vault: &mut Vec<LargeFile>) {
@@ -182,9 +182,9 @@ mod tests {
         let file2_path = temp_dir_path.to_owned() + "/file2.txt";
         let file3_path = temp_dir_path.to_owned() + "/file3.txt";
 
-        fs::write(&file1_path, "Hello, world!").unwrap();
-        fs::write(&file2_path, "This is a test").unwrap();
-        fs::write(&file3_path, "Another test").unwrap();
+        fs::write(file1_path, "Hello, world!").unwrap();
+        fs::write(file2_path, "This is a test").unwrap();
+        fs::write(file3_path, "Another test").unwrap();
 
         let request = GrepRequest {
             path: temp_dir_path,
@@ -195,6 +195,6 @@ mod tests {
         let storage = Arc::new(Mutex::new(Vec::new()));
         let result = grep(request, storage.clone()).unwrap();
 
-        let result_storage = result.lock().unwrap();
+        let _result_storage = result.lock().unwrap();
     }
 }
