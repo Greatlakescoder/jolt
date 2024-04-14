@@ -17,3 +17,4 @@ anyhow = "1.0.81"
 rayon = "1.10.0"
 tempfile = "3.10.1"
 tokio = { version = "1.36.0", features = ["full"] }
+psutil = "3.3.0"

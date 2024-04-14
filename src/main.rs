@@ -8,6 +8,7 @@ use axum::{
     routing::post,
     Router,
 };
+use anyhow::Error;
 use ratchet::component_service;
 
 use ratchet::file_service::*;
@@ -54,6 +55,7 @@ async fn main() {
         .route("/info/tasks", get(diagnose_handler))
         .route("/info/cpu", get(cpu_info_handler))
         .route("/info/memory", get(ram_info_handler))
+        .route("/task/kill", post(kill_task_handler))
         .route("/search", post(search)) // Add middleware to all routes
         .route("/file/largest", post(get_largest_file))
         .layer(
@@ -91,11 +93,37 @@ async fn main() {
 async fn home() -> &'static str {
     "Hello, World!"
 }
+
+
+
+#[derive(Serialize)]
+struct SerializableError {
+    message: String,
+}
+
+impl From<Error> for SerializableError {
+    fn from(error: Error) -> Self {
+        SerializableError {
+            message: error.to_string(),
+        }
+    }
+}
+
 async fn diagnose_handler() -> Json<Value> {
     let resp = component_service::scan_running_proccess();
-    component_service::get_network_information();
-    component_service::get_system_memory();
-    return Json(json!(resp));
+    match resp {
+        Ok(r) => {
+            return Json(json!(r))
+        }
+        Err(err) => {
+            let sr = SerializableError::from(err);
+            return Json(json!(sr));
+        }
+    }
+}
+
+async fn kill_task_handler() -> impl IntoResponse {
+    
 }
 
 async fn cpu_info_handler() -> Json<Value> {
