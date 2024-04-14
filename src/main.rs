@@ -3,7 +3,7 @@ use axum::{
     extract::Extension,
     http::StatusCode,
     response::Json,
-    response::{ErrorResponse, IntoResponse},
+    response::{IntoResponse},
     routing::get,
     routing::post,
     Router,
@@ -12,7 +12,7 @@ use anyhow::Error;
 use ratchet::component_service;
 
 use ratchet::file_service::*;
-use serde::Deserialize;
+
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::sync::{
@@ -113,11 +113,11 @@ async fn diagnose_handler() -> Json<Value> {
     let resp = component_service::scan_running_proccess();
     match resp {
         Ok(r) => {
-            return Json(json!(r))
+            Json(json!(r))
         }
         Err(err) => {
             let sr = SerializableError::from(err);
-            return Json(json!(sr));
+            Json(json!(sr))
         }
     }
 }
@@ -127,7 +127,7 @@ async fn kill_task_handler() -> impl IntoResponse {
 }
 
 async fn cpu_info_handler() -> Json<Value> {
-    let resp = match task::spawn_blocking(move || component_service::get_current_cpu_usage()).await
+    let resp = match task::spawn_blocking(component_service::get_current_cpu_usage).await
     {
         Ok(result) => result,
         Err(e) => {
@@ -135,12 +135,12 @@ async fn cpu_info_handler() -> Json<Value> {
         }
     };
 
-    return Json(json!(resp));
+    Json(json!(resp))
 }
 
 async fn ram_info_handler() -> Json<Value> {
     let resp = component_service::get_memory_cpu_usage();
-    return Json(json!(resp));
+    Json(json!(resp))
 }
 
 // the input to our `create_user` handler
@@ -165,7 +165,7 @@ async fn search(Json(payload): Json<SearchRequest>) -> Json<Value> {
     .unwrap();
     // We need to derefernece here because we want what the mutex guard is pointing to
     let data_vault = resp.lock().unwrap();
-    return Json(json!(*data_vault));
+    Json(json!(*data_vault))
 }
 
 // LESSON LEARNED https://docs.rs/axum/latest/axum/extract/index.html#the-order-of-extractors
@@ -194,12 +194,12 @@ async fn get_largest_file(
     // LESSON LEARNED - If you use regular mutex it blocks causes compile errors, had to use tokio mutex
     let db = app_state.clone();
     let resp = match task::spawn_blocking(move || {
-        let r = find_largest_files(
+        
+        find_largest_files(
             &payload.path,
             Arc::new(Mutex::new(Vec::new())),
             db.channel_sender.clone(),
-        );
-        return r;
+        )
     })
     .await
     {
@@ -219,6 +219,6 @@ async fn get_largest_file(
     };
     let file_total = app_state.total.lock().unwrap();
     let _ = stop_sender.send(());
-    return Json(json!({"files": *data_vault, "total_files_searched": *file_total}));
+    Json(json!({"files": *data_vault, "total_files_searched": *file_total}))
     // return Ok("")
 }
