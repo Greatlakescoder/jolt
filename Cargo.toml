@@ -1,4 +1,4 @@
-workspace = { members = ["beacon", "ratchet"] }
+workspace = { members = ["notifier", "sys_tools"] }
 [package]
 name = "jolt"
 version = "0.1.0"
@@ -18,7 +18,7 @@ sysinfo = "0.30.5"
 tokio = { version = "1.36.0", features = ["full"] }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 xml-rs = "0.8.19"
-ratchet = { path = "ratchet" }
+sys_tools = { path = "./sys_tools" }
 tower = { version = "0.4.13", features = ["util", "timeout"] }
 tower-http = { version = "0.5.2", features = ["add-extension", "trace"] }
 tracing = "0.1.40"

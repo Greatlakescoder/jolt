@@ -627,11 +627,11 @@ dependencies = [
  "futures",
  "prettytable-rs",
  "psutil",
- "ratchet",
  "rayon",
  "serde",
  "serde-xml-rs",
  "serde_json",
+ "sys_tools",
  "sysinfo",
  "tempfile",
  "tokio",
@@ -922,24 +922,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ratchet"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "csv",
- "prettytable-rs",
- "psutil",
- "rayon",
- "serde",
- "serde-xml-rs",
- "serde_json",
- "sysinfo",
- "tempfile",
- "tokio",
- "xml-rs",
-]
-
-[[package]]
 name = "rayon"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1207,6 +1189,24 @@ name = "sync_wrapper"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7065abeca94b6a8a577f9bd45aa0867a2238b74e8eb67cf10d492bc39351394"
+
+[[package]]
+name = "sys_tools"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "csv",
+ "prettytable-rs",
+ "psutil",
+ "rayon",
+ "serde",
+ "serde-xml-rs",
+ "serde_json",
+ "sysinfo",
+ "tempfile",
+ "tokio",
+ "xml-rs",
+]
 
 [[package]]
 name = "sysinfo"
