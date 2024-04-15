@@ -1,32 +1,26 @@
-use axum::{
-    error_handling::HandleErrorLayer,
-    extract::Extension,
-    http::StatusCode,
-    response::Json,
-    response::{IntoResponse},
-    routing::get,
-    routing::post,
-    Router,
-};
 use anyhow::Error;
+use axum::{
+    error_handling::HandleErrorLayer, extract::Extension, http::StatusCode, response::IntoResponse,
+    response::Json, routing::get, routing::post, Router,
+};
 use ratchet::component_service;
 
 use ratchet::file_service::*;
 
-use serde::Serialize;
+use futures::FutureExt;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::{
     mpsc::{channel, Sender},
     Arc, Mutex,
 };
 use std::time::Duration;
+use tokio::sync::oneshot;
 use tokio::task;
 use tower::{BoxError, ServiceBuilder};
 use tower_http::add_extension::AddExtensionLayer;
 use tower_http::trace::TraceLayer;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use tokio::sync::oneshot;
-use futures::FutureExt; // for `.fuse()`
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt}; // for `.fuse()`
 #[derive(Debug)]
 struct AppState {
     channel_sender: Arc<Sender<u64>>,
@@ -55,6 +49,8 @@ async fn main() {
         .route("/info/tasks", get(diagnose_handler))
         .route("/info/cpu", get(cpu_info_handler))
         .route("/info/memory", get(ram_info_handler))
+        .route("/info/network", get(network_info_handler))
+        .route("/info/system", get(get_system_information_handler))
         .route("/task/kill", post(kill_task_handler))
         .route("/search", post(search)) // Add middleware to all routes
         .route("/file/largest", post(get_largest_file))
@@ -94,8 +90,6 @@ async fn home() -> &'static str {
     "Hello, World!"
 }
 
-
-
 #[derive(Serialize)]
 struct SerializableError {
     message: String,
@@ -112,9 +106,22 @@ impl From<Error> for SerializableError {
 async fn diagnose_handler() -> Json<Value> {
     let resp = component_service::scan_running_proccess();
     match resp {
-        Ok(r) => {
-            Json(json!(r))
+        Ok(r) => Json(json!(r)),
+        Err(err) => {
+            let sr = SerializableError::from(err);
+            Json(json!(sr))
         }
+    }
+}
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct KillTaskRequest {
+    pid: u32,
+}
+
+async fn kill_task_handler(input: Json<KillTaskRequest>) -> impl IntoResponse {
+    let resp = component_service::kill_process(input.pid);
+    match resp {
+        Ok(r) => Json(json!(r)),
         Err(err) => {
             let sr = SerializableError::from(err);
             Json(json!(sr))
@@ -122,13 +129,20 @@ async fn diagnose_handler() -> Json<Value> {
     }
 }
 
-async fn kill_task_handler() -> impl IntoResponse {
-    
+async fn get_system_information_handler() -> Json<Value> {
+    let resp = component_service::get_system_information();
+    match resp {
+        Ok(r) => Json(json!(r)),
+        Err(err) => {
+            let sr = SerializableError::from(err);
+            Json(json!(sr))
+        }
+    }
 }
 
+
 async fn cpu_info_handler() -> Json<Value> {
-    let resp = match task::spawn_blocking(component_service::get_current_cpu_usage).await
-    {
+    let resp = match task::spawn_blocking(component_service::get_current_cpu_usage).await {
         Ok(result) => result,
         Err(e) => {
             return Json(json!({ "error": format!("Error in spawn_blocking: {:?}", e) }));
@@ -140,6 +154,11 @@ async fn cpu_info_handler() -> Json<Value> {
 
 async fn ram_info_handler() -> Json<Value> {
     let resp = component_service::get_memory_cpu_usage();
+    Json(json!(resp))
+}
+
+async fn network_info_handler() -> Json<Value> {
+    let resp = component_service::get_network_information();
     Json(json!(resp))
 }
 
@@ -194,7 +213,6 @@ async fn get_largest_file(
     // LESSON LEARNED - If you use regular mutex it blocks causes compile errors, had to use tokio mutex
     let db = app_state.clone();
     let resp = match task::spawn_blocking(move || {
-        
         find_largest_files(
             &payload.path,
             Arc::new(Mutex::new(Vec::new())),

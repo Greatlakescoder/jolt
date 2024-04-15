@@ -1,11 +1,11 @@
 use core::fmt;
 
 use serde::{Deserialize, Serialize};
-use std::{process::Command as OsCommand};
+use std::process::Command as OsCommand;
 use sysinfo::{Networks, System};
 
 use crate::table_builder::MagicTable;
-use psutil::process::{processes};
+use psutil::process::processes;
 
 #[derive(Serialize, Deserialize)]
 pub struct JoltOutput {
@@ -27,12 +27,7 @@ impl fmt::Display for JoltOutput {
             Memory Usage {} \n
             Cumulative CPU Time {} \n
             Command {} \n",
-            self.user,
-            self.pid,
-            self.cpu,
-            self.mem,
-            self.time,
-            self.command
+            self.user, self.pid, self.cpu, self.mem, self.time, self.command
         )
     }
 }
@@ -60,59 +55,58 @@ pub fn get_system_memory() {
     println!("used swap   : {} Mb", sys.used_swap() / 1024 / 1024);
 }
 
-pub fn get_system_information() {
+pub fn get_system_information() -> anyhow::Result<()> {
     let mut sys = System::new_all();
     sys.refresh_all();
     println!("System name:             {:?}", System::name());
     println!("System kernel version:   {:?}", System::kernel_version());
     println!("System OS version:       {:?}", System::os_version());
     println!("System host name:        {:?}", System::host_name());
+    println!("System uptime:        {:?}", System::uptime());
     // Number of CPUs:
     println!("NB CPUs: {}", sys.cpus().len());
     println!("total memory: {} Mb", sys.total_memory() / 1024 / 1024);
+    println!("Cpu Arch {}", System::cpu_arch().unwrap());
+    println!("total memory: {} Mb", sys.total_memory() / 1024 / 1024);
+    Ok(())
+
 }
+
 
 pub fn get_network_information() {
     let mut sys = System::new_all();
     sys.refresh_all();
     let networks = Networks::new_with_refreshed_list();
+    let mut users = sysinfo::Users::new();
+    for user in users.list() {
+        println!("{} is in {} groups", user.name(), user.groups().len());
+    }
     println!("=> networks:");
     for (interface_name, data) in &networks {
         println!(
-            "{interface_name}: {}/{} B",
+            "{interface_name}: {}/{} B  Mac Address: {}, Packets {}/{}",
             data.received(),
-            data.transmitted()
+            data.transmitted(),
+            data.mac_address(),
+            data.packets_received(),
+            data.packets_transmitted()
         );
     }
 }
 
-pub fn kill_process(pid: usize) {
-    #[cfg(unix)]
-    let status = OsCommand::new("kill")
-        .arg(pid.to_string())
-        .status()
-        .unwrap();
-
-    #[cfg(windows)]
-    let status = OsCommand::new("taskkill")
-        .arg("/F")
-        .arg("/PID")
-        .arg(pid.to_string())
-        .status()
-        .unwrap();
-
-    if status.success() {
-        println!("Successfully killed process {}", pid);
-    } else {
-        println!("Failed to kill process {}", pid);
+pub fn kill_process(pid: u32) -> anyhow::Result<()> {
+    let current_process = psutil::process::Process::new(pid)?;
+    if current_process.is_running() {
+        current_process.kill()?;
     }
+    return Ok(());
 }
 
-#[derive(Serialize,Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct CpuUsageResponse {
     pub cpus: Vec<CpuUsage>,
 }
-#[derive(Serialize,Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct CpuUsage {
     pub name: String,
     pub brand: String,
@@ -168,18 +162,17 @@ pub fn get_memory_cpu_usage() -> MemoryResponse {
     }
 }
 
-pub fn scan_running_proccess() ->anyhow::Result<Vec<JoltOutput>> {
+pub fn scan_running_proccess() -> anyhow::Result<Vec<JoltOutput>> {
     let mut output: Vec<JoltOutput> = vec![];
 
     for alive_process in processes()? {
-        
         let mut process = alive_process?;
         let name = process.pid();
         let pid = process.pid();
         let cpu = process.cpu_percent()?;
         let mem = process.memory_percent()?;
         let command = process.name()?;
-        let start_time =  process.create_time().as_secs().to_string();
+        let start_time = process.create_time().as_secs().to_string();
 
         let new_record = JoltOutput {
             user: name.to_string(),
@@ -196,10 +189,10 @@ pub fn scan_running_proccess() ->anyhow::Result<Vec<JoltOutput>> {
     Ok(output)
 }
 
-
-
-
 // Direct way for checking info on process
+//
+//
+//
 // #[cfg(target_os = "linux")]
 // pub fn scan_running_proccess() -> Vec<JoltOutput> {
 //     if cfg!(target_os = "linux") {
