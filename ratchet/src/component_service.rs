@@ -1,7 +1,7 @@
 use core::fmt;
 
 use serde::{Deserialize, Serialize};
-use std::process::Command as OsCommand;
+
 use sysinfo::{Networks, System};
 
 use crate::table_builder::MagicTable;
@@ -77,7 +77,7 @@ pub fn get_network_information() {
     let mut sys = System::new_all();
     sys.refresh_all();
     let networks = Networks::new_with_refreshed_list();
-    let mut users = sysinfo::Users::new();
+    let users = sysinfo::Users::new();
     for user in users.list() {
         println!("{} is in {} groups", user.name(), user.groups().len());
     }
@@ -99,7 +99,7 @@ pub fn kill_process(pid: u32) -> anyhow::Result<()> {
     if current_process.is_running() {
         current_process.kill()?;
     }
-    return Ok(());
+    Ok(())
 }
 
 #[derive(Serialize, Deserialize)]
