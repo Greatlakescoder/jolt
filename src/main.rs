@@ -5,6 +5,7 @@ use axum::{
 };
 use sys_tools::component_service;
 
+use sys_tools::component_service::get_system_information;
 use sys_tools::file_service::*;
 
 use futures::FutureExt;
@@ -14,7 +15,7 @@ use std::sync::{
     mpsc::{channel, Sender},
     Arc, Mutex,
 };
-use std::time::Duration;
+use tokio::time::{sleep,Duration};
 use tokio::sync::oneshot;
 use tokio::task;
 use tower::{BoxError, ServiceBuilder};
@@ -80,6 +81,10 @@ async fn main() {
         }
     });
 
+    // This runs in the background
+    tokio::spawn(run_every_30_seconds());
+ 
+
     // run our app with hyper, listening globally on port 3000
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     tracing::debug!("listening on {}", listener.local_addr().unwrap());
@@ -89,6 +94,16 @@ async fn main() {
 async fn home() -> &'static str {
     "Hello, World!"
 }
+
+async fn run_every_30_seconds() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    loop {
+        tokio::spawn(async {
+            get_system_information().unwrap();
+        });
+        sleep(Duration::from_secs(30)).await;
+    }
+}
+
 
 #[derive(Serialize)]
 struct SerializableError {

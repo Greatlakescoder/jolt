@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use sysinfo::{Networks, System};
 
-use crate::table_builder::MagicTable;
 use psutil::process::processes;
+
 
 #[derive(Serialize, Deserialize)]
 pub struct JoltOutput {
@@ -29,19 +29,6 @@ impl fmt::Display for JoltOutput {
             Command {} \n",
             self.user, self.pid, self.cpu, self.mem, self.time, self.command
         )
-    }
-}
-
-impl MagicTable for JoltOutput {
-    fn build_table(&self) -> Vec<(String, String)> {
-        vec![
-            ("User".to_string(), self.user.to_string()),
-            ("PID".to_string(), self.pid.to_string()),
-            ("%CPU".to_string(), self.cpu.to_string()),
-            ("%MEM".to_string(), self.mem.to_string()),
-            ("TIME".to_string(), self.time.to_string()),
-            ("COMMAND".to_string(), self.command.to_string()),
-        ]
     }
 }
 

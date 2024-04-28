@@ -3,7 +3,6 @@ extern crate prettytable;
 pub mod component_service;
 pub mod file_service;
 pub mod log_service;
-pub mod table_builder;
 
 
 
