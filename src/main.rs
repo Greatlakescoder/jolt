@@ -129,6 +129,52 @@ async fn kill_task_handler(input: Json<KillTaskRequest>) -> impl IntoResponse {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::Request;
+    use axum::response::IntoResponse;
+    use hyper::Response;
+    use mockall::mock;
+    use std::net::SocketAddr;
+    use tower::Service;
+
+    // Mock the component_service module
+    mock! {
+        pub ComponentService {
+            fn kill_process(&self, pid: u32) -> anyhow::Result<()>;
+        }
+    }
+
+    // #[tokio::test]
+    // async fn test_kill_task_handler() {
+    //     // Create a mock ComponentService
+    //     let mut mock_service = MockComponentService::new();
+
+    //     // Set expectations
+    //     mock_service.expect_kill_process()
+    //         .returning(|_| Ok(()));
+
+    //     // Replace the real component_service with the mock
+    //     let component_service = Arc::new(mock_service);
+
+    //     let request = Request::builder()
+    //         .method("POST")
+    //         .uri("/kill")
+    //         .body(Body::from(r#"{"pid":1234}"#))
+    //         .unwrap();
+
+    //     let response: Response<Body> = kill_task_handler(request).await.unwrap();
+
+    //     assert_eq!(response.status(), StatusCode::OK);
+    //     let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    //     assert_eq!(body, b"{\"success\":true}");
+    // }
+}
+
+
+
 async fn get_system_information_handler() -> Json<Value> {
     let resp = component_service::get_system_information();
     match resp {
