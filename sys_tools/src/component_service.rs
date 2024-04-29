@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use sysinfo::{Networks, System};
 
 use psutil::process::processes;
+use psutil::host;
 
 
 #[derive(Serialize, Deserialize)]
@@ -15,6 +16,33 @@ pub struct JoltOutput {
     mem: i32,
     time: String,
     command: String,
+}
+
+#[derive(Serialize, Deserialize,Debug,Default)]
+pub struct SystemInformation {
+    name: String,
+    os_version: String,
+    host_name: String,
+    uptime:  u64,
+    total_cpus: u64,
+    total_memory: u64,
+    cpu_arch:String
+}
+
+impl fmt::Display for SystemInformation {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "Name {} \n 
+            Os Version {} \n
+            Hostname {} \n
+            uptime {} \n
+            total cpus {} \n
+            total memory {} \n
+            cpu arch {} \n",
+            self.name, self.os_version, self.host_name, self.uptime, self.total_cpus, self.total_memory, self.cpu_arch
+        )
+    }
 }
 
 impl fmt::Display for JoltOutput {
@@ -42,20 +70,28 @@ pub fn get_system_memory() {
     println!("used swap   : {} Mb", sys.used_swap() / 1024 / 1024);
 }
 
-pub fn get_system_information() -> anyhow::Result<()> {
+pub fn get_system_information() -> anyhow::Result<SystemInformation> {
     let mut sys = System::new_all();
     sys.refresh_all();
-    println!("System name:             {:?}", System::name());
-    println!("System kernel version:   {:?}", System::kernel_version());
-    println!("System OS version:       {:?}", System::os_version());
-    println!("System host name:        {:?}", System::host_name());
-    println!("System uptime:        {:?}", System::uptime());
-    // Number of CPUs:
-    println!("NB CPUs: {}", sys.cpus().len());
-    println!("total memory: {} Mb", sys.total_memory() / 1024 / 1024);
-    println!("Cpu Arch {}", System::cpu_arch().unwrap());
-    println!("total memory: {} Mb", sys.total_memory() / 1024 / 1024);
-    Ok(())
+    // println!("System name:             {:?}", System::name());
+    // println!("System kernel version:   {:?}", System::kernel_version());
+    // println!("System OS version:       {:?}", System::os_version());
+    // println!("System host name:        {:?}", System::host_name());
+    // println!("System uptime:        {:?}", System::uptime());
+    // // Number of CPUs:
+    // println!("NB CPUs: {}", sys.cpus().len());
+    // println!("total memory: {} Mb", sys.total_memory() / 1024 / 1024);
+    // println!("Cpu Arch {}", System::cpu_arch().unwrap());
+    // println!("total memory: {} Mb", sys.total_memory() / 1024 / 1024);
+    Ok(SystemInformation{
+        cpu_arch: psutil::host::info().architecture().to_string(),
+        host_name: psutil::host::info().hostname().to_string(),
+        os_version: psutil::host::info().operating_system().to_string(),
+        name: System::name().unwrap(),
+        uptime: psutil::host::uptime().unwrap().as_secs(),
+        total_cpus: psutil::cpu::cpu_count(),
+        total_memory: psutil::memory::virtual_memory().unwrap().available()
+    })
 
 }
 
