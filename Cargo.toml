@@ -1,4 +1,4 @@
-workspace = { members = [ "console-ui","notifier", "sys_tools"] }
+workspace = { members = ["notifier", "sys_tools"] }
 [package]
 name = "jolt"
 version = "0.1.0"
